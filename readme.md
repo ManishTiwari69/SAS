@@ -57,7 +57,7 @@ python -m venv .venv
 source .venv/bin/activate
 
 # Install required libraries
-pip install -r requirement.txt bash```
+pip install -r requirement.txt ```        
 
 
 🏃 How to Run
