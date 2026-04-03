@@ -1,0 +1,4 @@
+mtcnn
+install face_recognition
+opencv-python
+pillow
