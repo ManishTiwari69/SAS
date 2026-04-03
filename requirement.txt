@@ -3,3 +3,6 @@ face_recognition
 opencv-python
 pillow
 mysql-connector-python
+pandas 
+numpy 
+opencv-contrib-python 
