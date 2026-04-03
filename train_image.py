@@ -3,66 +3,79 @@ import cv2
 import numpy as np
 from PIL import Image
 
-def get_specific_images_and_labels(path, target_id):
-    """Only fetches images belonging to the NEWLY registered ID."""
-    imagePaths = [os.path.join(path, f) for f in os.listdir(path)]
+def get_specific_images_and_labels(base_path, target_id):
+    """Recursively searches through subfolders for images matching the target_id."""
     faces = []
     ids = []
     
-    for imagePath in imagePaths:
-        # Expected format: Name.ID.SampleNum.jpg
-        filename = os.path.split(imagePath)[-1]
-        try:
-            current_id = int(filename.split(".")[1])
-            # Only process if it matches the ID we just captured
-            if current_id == int(target_id):
-                pilImage = Image.open(imagePath).convert('L')
-                imageNp = np.array(pilImage, 'uint8')
-                faces.append(imageNp)
-                ids.append(current_id)
-        except (IndexError, ValueError):
-            continue
-            
+    # os.walk loops through every subfolder inside TrainingImage
+    for root, dirs, files in os.walk(base_path):
+        for filename in files:
+            if filename.endswith(".jpg"):
+                try:
+                    parts = filename.split(".")
+                    current_id = int(parts[1])
+                    
+                    if current_id == int(target_id):
+                        imagePath = os.path.join(root, filename)
+                        pilImage = Image.open(imagePath).convert('L')
+                        imageNp = np.array(pilImage, 'uint8')
+                        faces.append(imageNp)
+                        ids.append(current_id)
+                except (IndexError, ValueError):
+                    continue
     return faces, ids
 
-def TrainImages(new_id=None):
+def TrainImages(new_id=None, training_type="student"):
     """
-    If new_id is provided, it performs Incremental Training (Fast).
-    If new_id is None, it performs Full Training (Slow).
+    Handles both Admin and Student training.
+    Uses .update() for speed if the trainer file already exists.
     """
     recognizer = cv2.face.LBPHFaceRecognizer_create()
-    trainer_path = "TrainingImageLabel" + os.sep + "Trainner.yml"
     
-    # Ensure directory exists
-    if not os.path.exists("TrainingImageLabel"):
-        os.makedirs("TrainingImageLabel")
+    # 1. Set the correct file path based on type
+    folder = "TrainingImageLabel"
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+        
+    if training_type == "admin":
+        trainer_path = os.path.join(folder, "AdminTrainner.yml")
+    else:
+        trainer_path = os.path.join(folder, "StudentTrainner.yml")
 
-    # 1. Check if we are UPDATING or STARTING FRESH
+    # 2. Logic for Incremental vs Full Training
     if new_id and os.path.exists(trainer_path):
-        print(f"--- Incremental Training for ID: {new_id} ---")
+        print(f"--- Updating {training_type} Model for ID: {new_id} ---")
         recognizer.read(trainer_path)
         faces, ids = get_specific_images_and_labels("TrainingImage", new_id)
         
         if len(faces) > 0:
-            # .update() adds to the existing model instead of overwriting it
+            # .update() keeps old data and adds new faces
             recognizer.update(faces, np.array(ids))
-            print(f"Successfully updated model with {len(faces)} new images.")
         else:
-            print("No new images found for this ID.")
+            print("No new images found to update.")
             return
     else:
-        print("--- Full System Training ---")
-        # Fallback to your old method for the very first time
-        from capture_image import is_number # using utility to fetch all
-        imagePaths = [os.path.join("TrainingImage", f) for f in os.listdir("TrainingImage")]
+        print(f"--- Full Training for {training_type} ---")
+        # For a full train, we fetch ALL images in the folder
+        imagePaths = [os.path.join("TrainingImage", f) for f in os.listdir("TrainingImage") if f.endswith(".jpg")]
         faces, ids = [], []
-        for path in imagePaths:
-            pilImage = Image.open(path).convert('L')
-            faces.append(np.array(pilImage, 'uint8'))
-            ids.append(int(os.path.split(path)[-1].split(".")[1]))
         
-        recognizer.train(faces, np.array(ids))
+        for path in imagePaths:
+            try:
+                pilImage = Image.open(path).convert('L')
+                faces.append(np.array(pilImage, 'uint8'))
+                # Pull ID from filename
+                ids.append(int(os.path.split(path)[-1].split(".")[1]))
+            except Exception:
+                continue
+        
+        if len(faces) > 0:
+            recognizer.train(faces, np.array(ids))
+        else:
+            print("No images found to train!")
+            return
 
-    # 2. Save the result
+    # 3. Save the specific trainer file
     recognizer.save(trainer_path)
-    print("[SUCCESS] AI Model Synchronized.")
+    print(f"[SUCCESS] {training_type.capitalize()} Model Saved at {trainer_path}")

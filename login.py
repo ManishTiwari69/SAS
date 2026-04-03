@@ -1,67 +1,135 @@
 import tkinter as tk
 from tkinter import messagebox
+import cv2
+import os
 from db_config import get_db_connection
 
-def validate_login(username, password, window):
-    # For a student project, you can hardcode admin credentials or check DB
-    # Let's check a 'users' table in MySQL for better marks!
+# --- Login Logic ---
+
+def validate_password_login(username, password, window):
+    """Checks credentials against the MySQL 'admins' table."""
     try:
         db = get_db_connection()
         cursor = db.cursor()
+        
+        # Check if username and password match in the database
         query = "SELECT * FROM admins WHERE username = %s AND password = %s"
         cursor.execute(query, (username, password))
         result = cursor.fetchone()
         db.close()
 
         if result:
-            window.destroy() # Close login
-            import main # Launch the dashboard
+            print(f"✅ Login successful for user: {username}")
+            launch_main(window)
+        # Emergency Fallback (Useful for your first login before setting up DB)
+        elif username == "admin" and password == "admin123":
+            print("⚠️ Using hardcoded fallback login.")
+            launch_main(window)
         else:
-            messagebox.showerror("Login Failed", "Invalid Username or Password")
+            messagebox.showerror("Error", "Invalid Username or Password")
+            
     except Exception as e:
-        # Fallback for demo if DB table 'admins' doesn't exist yet
+        print(f"⚠️ Database connection failed: {e}")
+        # Fallback if MySQL/XAMPP is down during your demo
         if username == "admin" and password == "admin123":
-            window.destroy()
-            import main
+            launch_main(window)
         else:
-            messagebox.showerror("Error", "Database connection failed or invalid credentials.")
+            messagebox.showerror("Connection Error", "Could not connect to Database. Check XAMPP.")
+
+def validate_face_login(window):
+    """Activates camera using ONLY the AdminTrainner.yml file."""
+    trainer_path = "TrainingImageLabel" + os.sep + "AdminTrainner.yml"
+    
+    if not os.path.exists(trainer_path):
+        messagebox.showerror("Error", "Admin Face Data not found!\nPlease use the 'Register Admin' button in the dashboard first.")
+        return
+
+    recognizer = cv2.face.LBPHFaceRecognizer_create()
+    recognizer.read(trainer_path)
+    face_cascade = cv2.CascadeClassifier("haarcascade_default.xml")
+    
+    cap = cv2.VideoCapture(0)
+    found_admin = False
+    
+    # Give the user 10 seconds to show their face
+    start_time = os.times().elapsed
+    while True: 
+        ret, frame = cap.read()
+        if not ret: break
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        faces = face_cascade.detectMultiScale(gray, 1.3, 5)
+        
+        for (x, y, w, h) in faces:
+            predicted_id, conf = recognizer.predict(gray[y:y+h, x:x+w])
+            
+            # Lower confidence = better match
+            if conf < 50: 
+                found_admin = True
+                break
+        
+        cv2.imshow("Secure Face Login", frame)
+        if cv2.waitKey(1) == ord('q') or found_admin:
+            break
+            
+    cap.release()
+    cv2.destroyAllWindows()
+
+    if found_admin:
+        messagebox.showinfo("Success", "Admin Identity Verified!")
+        launch_main(window)
+    else:
+        messagebox.showwarning("Access Denied", "Face not recognized as an Administrator.")
+
+def launch_main(window):
+    """Closes login and launches dashboard."""
+    window.destroy()
+    import main
+    # Ensure main.py has the launch_dashboard() function defined
+    main.launch_dashboard()
+
+# --- UI Setup ---
+# (Your login_page() code remains identical to the template)
+# --- UI Setup ---
 
 def login_page():
     root = tk.Tk()
-    root.title("Attendance System - Login")
-    root.geometry("800x500")
-    root.configure(bg="#2c3e50") # Matching your dashboard theme
+    root.title("Attendance System - Secure Login")
+    root.geometry("900x550")
+    root.configure(bg="#f0f2f5")
 
-    # Left Side: Card Template (Simulated)
-    left_frame = tk.Frame(root, bg="#3498db", width=400, height=500)
+    # Left Frame (Visual side matching your screenshot)
+    left_frame = tk.Frame(root, bg="#3498db", width=450)
     left_frame.pack(side="left", fill="both", expand=True)
-
-    card_label = tk.Label(left_frame, text="🛡️\nSecure Access", fg="white", bg="#3498db", font=("Arial", 30, "bold"))
-    card_label.place(relx=0.5, rely=0.4, anchor="center")
     
-    sub_text = tk.Label(left_frame, text="Face Recognition Attendance\nManagement System", fg="white", bg="#3498db", font=("Arial", 12))
-    sub_text.place(relx=0.5, rely=0.6, anchor="center")
+    # You can place your blue graphic here or use a label
+    tk.Label(left_frame, text="🔒", font=("Arial", 80), bg="#3498db", fg="white").pack(pady=(100, 10))
+    tk.Label(left_frame, text="SECURE ACCESS", font=("Arial", 25, "bold"), bg="#3498db", fg="white").pack()
 
-    # Right Side: Login Form
-    right_frame = tk.Frame(root, bg="white", width=400, height=500)
+    # Right Frame (Input side)
+    right_frame = tk.Frame(root, bg="white", width=450)
     right_frame.pack(side="right", fill="both", expand=True)
 
-    tk.Label(right_frame, text="Login to System", font=("Arial", 20, "bold"), bg="white", fg="#2c3e50").pack(pady=(80, 20))
+    tk.Label(right_frame, text="System Login", font=("Arial", 22, "bold"), bg="white").pack(pady=(50, 30))
 
-    # Username
-    tk.Label(right_frame, text="Username", bg="white", fg="gray").pack(anchor="w", padx=50)
-    user_entry = tk.Entry(right_frame, font=("Arial", 12), bd=0, highlightthickness=1, highlightbackground="lightgray")
-    user_entry.pack(fill="x", padx=50, pady=5)
+    # Input Fields
+    tk.Label(right_frame, text="Username", bg="white", fg="gray").pack(anchor="w", padx=60)
+    user_ent = tk.Entry(right_frame, font=("Arial", 12), bg="#e8f0fe", bd=0)
+    user_ent.pack(fill="x", padx=60, pady=5, ipady=8)
 
-    # Password
-    tk.Label(right_frame, text="Password", bg="white", fg="gray").pack(anchor="w", padx=50, pady=(10, 0))
-    pass_entry = tk.Entry(right_frame, font=("Arial", 12), show="*", bd=0, highlightthickness=1, highlightbackground="lightgray")
-    pass_entry.pack(fill="x", padx=50, pady=5)
+    tk.Label(right_frame, text="Password", bg="white", fg="gray").pack(anchor="w", padx=60, pady=(10, 0))
+    pass_ent = tk.Entry(right_frame, font=("Arial", 12), bg="#e8f0fe", bd=0, show="*")
+    pass_ent.pack(fill="x", padx=60, pady=5, ipady=8)
 
-    # Sign In Button
-    btn_signin = tk.Button(right_frame, text="Sign In", bg="#3498db", fg="white", font=("Arial", 12, "bold"), 
-                           command=lambda: validate_login(user_entry.get(), pass_entry.get(), root))
-    btn_signin.pack(fill="x", padx=50, pady=30)
+    # Buttons
+    btn_login = tk.Button(right_frame, text="Sign In", bg="#00d2ff", fg="white", 
+                          font=("Arial", 12, "bold"), bd=0, cursor="hand2",
+                          command=lambda: validate_password_login(user_ent.get(), pass_ent.get(), root))
+    btn_login.pack(fill="x", padx=60, pady=(30, 10), ipady=5)
+
+    btn_face = tk.Button(right_frame, text="Sign In With Face Id", bg="white", fg="#3498db", 
+                         font=("Arial", 11, "bold"), bd=1, relief="solid", cursor="hand2",
+                         command=lambda: validate_face_login(root))
+    btn_face.pack(fill="x", padx=60, pady=10, ipady=5)
 
     root.mainloop()
 
