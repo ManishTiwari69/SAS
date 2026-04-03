@@ -57,20 +57,20 @@ python -m venv .venv
 source .venv/bin/activate
 
 # Install required libraries
-pip install -r requirement.txt
+pip install -r requirement.txt ```
 
 
 🏃 How to Run
-1. Check Database ConnectionOpen db_config.py and ensure your MySQL credentials are correct. Default XAMPP settings are usually:
+1. Check Database Connection. Open db_config.py and ensure your MySQL credentials are correct. Default XAMPP settings are usually:
 Host: localhost
 User: root
 Password: "" (Empty)
 
-2. Start the ApplicationRun the login script from your terminal:
+2. Start the Application. Run the login script from your terminal:
 #Run Python File
 python login.py
 
-3. Initial LoginUse the default administrator credentials to access the system:
+3. Initial Login: Use the default administrator credentials to access the system:
 Username: admin
 Password: admin1234. 
 
