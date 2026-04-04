@@ -64,7 +64,7 @@ def show_attendance(container): # 1. Accept the container
     except Exception as e:
         messagebox.showerror("DB Error", f"Could not fetch records: {e}")
 
-    # Close button
-    btn_close = tk.Button(view_window, text="Close Window", command=view_window.destroy, 
-                          bg="#e74c3c", fg="white", font=("Arial", 10, "bold"), width=20)
-    btn_close.pack(pady=15)
+    # # Close button
+    # btn_close = tk.Button(view_window, text="Close Window", command=view_window.destroy, 
+    #                       bg="#e74c3c", fg="white", font=("Arial", 10, "bold"), width=20)
+    # btn_close.pack(pady=15)

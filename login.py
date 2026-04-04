@@ -8,14 +8,25 @@ from db_config import get_db_connection
 from session import user_session  # Import the session instance
 
 class LoginApp:
-    def __init__(self):
-        self.root = tk.Tk()
-        self.root.title("Attendance System - Secure Login")
-        self.root.geometry("1300x850")
-        self.root.resizable(True, True)
+    def __init__(self, existing_root=None):
+        if existing_root:
+            self.root = existing_root
+        else:
+            self.root = tk.Tk()
+            self.root.title("Attendance System - Secure Login")
+            self.root.geometry("1300x850")
+            self.root.resizable(True, True)
 
+    # 2. IMPORTANT: Clear EVERYTHING currently inside the window
+    # This removes the "AdminDashboard" skeletons before drawing the login
+        for widget in self.root.winfo_children():
+            widget.destroy()
+
+    # 3. Setup variables
         self.cap = None
         self.is_camera_on = False
+
+
         self.recognizer = cv2.face.LBPHFaceRecognizer_create()
         self.face_cascade = cv2.CascadeClassifier("haarcascade_default.xml")
 
@@ -49,6 +60,13 @@ class LoginApp:
 
         tk.Button(self.right_frame, text="Sign In With Face ID", bg="white", fg="#3498db", font=("Arial", 11, "bold"), 
                   bd=1, relief="solid", cursor="hand2", command=self.toggle_face_login).pack(fill="x", padx=60, pady=10, ipady=5)
+
+
+        if user_session.login_message:
+            self.status_lbl.config(text=user_session.login_message, fg="#e74c3c")
+            # Clear it so it doesn't show up again on a fresh start
+            user_session.login_message = ""
+
 
     # --- UPDATED: SECURE PASSWORD CHECK ---
     def handle_password_login(self):
@@ -140,20 +158,25 @@ class LoginApp:
         self.status_lbl.config(text="SECURE ACCESS", fg="white")
 
     def launch_main(self):
+    # 1. Kill the camera so it doesn't hang in the background
         self.stop_camera()
-
-        user_session.is_logged_in = True
-        user_session.current_user = self.user_ent.get() if self.user_ent.get() else "Admin_FaceID"
         
-        # 3. Clear the window and render the main dashboard
+        # 2. Update the session so Main.py lets us in
+        user_session.is_logged_in = True
+        user_session.current_user = self.user_ent.get() if self.user_ent.get() else "Admin"
+
+        # 3. CRITICAL: Wipe the window clean before importing Main
         for widget in self.root.winfo_children():
             widget.destroy()
 
-        for widget in self.root.winfo_children():
-            widget.destroy()
-            
-        import main
-        main.render_dashboard(self.root)
+        # 4. Import using the EXACT filename (usually lowercase 'main')
+        try:
+            import main 
+            main.render_dashboard(self.root)
+        except ModuleNotFoundError:
+            # If your file is definitely 'Main.py', use this instead:
+            import Main
+            Main.render_dashboard(self.root)
 
     def run(self):
         self.root.mainloop()
