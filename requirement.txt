@@ -6,3 +6,5 @@ mysql-connector-python
 pandas 
 numpy 
 opencv-contrib-python 
+tkcalendar
+bcrypt

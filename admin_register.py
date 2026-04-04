@@ -1,163 +1,167 @@
 import tkinter as tk
-from tkinter import messagebox, ttk, filedialog
+from tkinter import messagebox, filedialog
+from tkcalendar import DateEntry
+from PIL import Image, ImageTk
 import cv2
 import os
-from PIL import Image, ImageTk
-from db_config import get_db_connection
-import train_image
 import shutil
+import bcrypt
+from db_config import get_db_connection
 
-def register_admin():
-    reg_window = tk.Toplevel()
-    reg_window.title("Admin Registration - Full Profile")
-    reg_window.geometry("550x800")
-    reg_window.configure(bg="#f8f9fa")
+UPLOAD_DIR = "Admin_Profiles"
+if not os.path.exists(UPLOAD_DIR):
+    os.makedirs(UPLOAD_DIR)
 
-    uploaded_pic_path = tk.StringVar(value="")
+def register_admin(container):
+    # 1. Clear existing widgets in the content area
+    for widget in container.winfo_children():
+        widget.destroy()
 
-    # --- Header ---
-    header = tk.Frame(reg_window, bg="#3498db", height=80)
-    header.pack(fill="x")
-    tk.Label(header, text="ADMIN REGISTRATION", font=("Arial", 16, "bold"), bg="#3498db", fg="white").pack(pady=20)
+    # REMOVED: container.title, container.geometry, container.configure
+    # These belong to the main window, not this Frame.
 
-    # --- Scrollable Main Frame ---
-    container = tk.Frame(reg_window, bg="#f8f9fa")
-    container.pack(fill="both", expand=True, padx=20, pady=10)
+    # Variables
+    selected_pic_relative_path = tk.StringVar()
+    gender_var = tk.StringVar(value="Male")
+    is_capturing = [False] 
+    cap = [None]
 
-    canvas = tk.Canvas(container, bg="#f8f9fa", highlightthickness=0)
-    scrollbar = ttk.Scrollbar(container, orient="vertical", command=canvas.yview)
-    scroll_frame = tk.Frame(canvas, bg="#f8f9fa")
+    # --- Header (Now relative to container) ---
+    header = tk.Frame(container, bg="#3498db", height=60)
+    header.pack(side="top", fill="x")
+    tk.Label(header, text="🛡️ NEW ADMIN REGISTRATION", font=("Arial", 16, "bold"), 
+             bg="#3498db", fg="white").pack(pady=15)
 
-    scroll_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
-    canvas.create_window((0, 0), window=scroll_frame, anchor="nw", width=480)
-    canvas.configure(yscrollcommand=scrollbar.set)
+    # --- Main Container ---
+    main_frame = tk.Frame(container, bg="#f4f7f6")
+    main_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-    canvas.pack(side="left", fill="both", expand=True)
-    scrollbar.pack(side="right", fill="y")
+    # LEFT COLUMN
+    left_column = tk.Frame(main_frame, bg="#f4f7f6")
+    left_column.pack(side="left", fill="both", expand=True, padx=5)
 
-    # --- UI Helper ---
-    def create_field(parent, label_text, placeholder=""):
-        frame = tk.Frame(parent, bg="#f8f9fa")
-        frame.pack(fill="x", pady=5)
-        tk.Label(frame, text=label_text, font=("Arial", 10, "bold"), bg="#f8f9fa", fg="#34495e").pack(anchor="w")
-        entry = tk.Entry(frame, font=("Arial", 11), bd=1, relief="flat", highlightthickness=1, highlightbackground="#dcdde1")
-        entry.pack(fill="x", ipady=8, pady=2)
-        if placeholder:
-            entry.insert(0, placeholder)
+    form_frame = tk.LabelFrame(left_column, text="Admin Details", bg="white", font=("Arial", 10, "bold"), padx=15, pady=10)
+    form_frame.pack(fill="x", pady=5)
+
+    ents = {}
+    def create_field(label, row, is_pass=False):
+        tk.Label(form_frame, text=label, bg="white").grid(row=row, column=0, pady=5, sticky="w")
+        entry = tk.Entry(form_frame, font=("Arial", 10), bg="#f0f2f5", show="*" if is_pass else "", width=28)
+        entry.grid(row=row, column=1, pady=5, padx=10)
         return entry
 
-    # --- Form Fields ---
-    user_ent = create_field(scroll_frame, "Username*")
-    pass_ent = create_field(scroll_frame, "Password*")
-    pass_ent.config(show="*")
-    
-    fname_ent = create_field(scroll_frame, "First Name")
-    lname_ent = create_field(scroll_frame, "Last Name")
-    
-    # Date Field with clear format
-    dob_ent = create_field(scroll_frame, "Date of Birth (YYYY-MM-DD)", "2000-01-01")
-    
-    tk.Label(scroll_frame, text="Gender", font=("Arial", 10, "bold"), bg="#f8f9fa", fg="#34495e").pack(anchor="w", pady=(5,0))
-    gender_var = tk.StringVar(value="Male")
-    gender_menu = ttk.Combobox(scroll_frame, textvariable=gender_var, values=["Male", "Female", "Other"], state="readonly")
-    gender_menu.pack(fill="x", ipady=5)
+    ents['user'] = create_field("Username:", 0)
+    ents['pass'] = create_field("Password:", 1, is_pass=True)
+    ents['fname'] = create_field("First Name:", 2)
+    ents['lname'] = create_field("Last Name:", 3)
 
-    addr_ent = create_field(scroll_frame, "Address")
-    phone_ent = create_field(scroll_frame, "Phone No")
+    tk.Label(form_frame, text="DOB:", bg="white").grid(row=4, column=0, pady=5, sticky="w")
+    ents['dob'] = DateEntry(form_frame, width=26, background='darkblue', foreground='white', borderwidth=2)
+    ents['dob'].grid(row=4, column=1, pady=5, padx=10)
+    ents['phone'] = create_field("Phone No:", 5)
 
-    # --- Upload Profile Pic Section ---
-    tk.Label(scroll_frame, text="Profile Photo", font=("Arial", 10, "bold"), bg="#f8f9fa", fg="#34495e").pack(anchor="w", pady=(15,0))
+    tk.Label(form_frame, text="Gender:", bg="white").grid(row=6, column=0, pady=5, sticky="w")
+    tk.OptionMenu(form_frame, gender_var, "Male", "Female", "Other").grid(row=6, column=1, pady=5, padx=10, sticky="ew")
+
+    tk.Label(form_frame, text="Address:", bg="white").grid(row=7, column=0, pady=5, sticky="nw")
+    addr_txt = tk.Text(form_frame, height=3, width=21, font=("Arial", 10), bg="#f0f2f5")
+    addr_txt.grid(row=7, column=1, pady=5, padx=10)
+
+    # --- Profile Preview ---
+    preview_lbl = tk.Label(left_column, text="No Image", bg="#dfe6e9", width=20, height=10)
+    preview_lbl.pack(pady=5)
     
     def upload_image():
-        file_path = filedialog.askopenfilename(filetypes=[("Image Files", "*.jpg;*.jpeg;*.png")])
-        if file_path:
-            uploaded_pic_path.set(file_path)
-            lbl_status.config(text="Status: Image Selected ✅", fg="green")
+        abs_path = filedialog.askopenfilename(filetypes=[("Images", "*.jpg *.png *.jpeg")])
+        if abs_path:
+            username = ents['user'].get() or "admin"
+            filename = f"{username}_profile{os.path.splitext(abs_path)[1]}"
+            dest_path = os.path.join(UPLOAD_DIR, filename)
+            shutil.copy(abs_path, dest_path)
 
-    btn_upload = tk.Button(scroll_frame, text="📁 Upload Photo from PC", command=upload_image, bg="#ecf0f1", bd=0, cursor="hand2")
-    btn_upload.pack(fill="x", pady=5, ipady=5)
-    lbl_status = tk.Label(scroll_frame, text="No image selected (Camera will be used if empty)", font=("Arial", 8), bg="#f8f9fa", fg="gray")
-    lbl_status.pack()
+            img = Image.open(dest_path).resize((150, 150), Image.LANCZOS)
+            photo = ImageTk.PhotoImage(img)
+            preview_lbl.config(image=photo, text="")
+            preview_lbl.image = photo
+            selected_pic_relative_path.set(dest_path.replace("\\", "/"))
 
-    # --- Submit Logic ---
-    def submit_data():
-        u, p, dob = user_ent.get(), pass_ent.get(), dob_ent.get()
+    tk.Button(left_column, text="📁 Upload Photo", command=upload_image, bg="#34495e", fg="white").pack(fill="x")
+
+    # RIGHT COLUMN (Face Capture)
+    right_column = tk.Frame(main_frame, bg="#f4f7f6")
+    right_column.pack(side="right", fill="both", expand=True, padx=10)
+    
+    cam_box = tk.LabelFrame(right_column, text="Internal Face Capture", bg="white", font=("Arial", 10, "bold"))
+    cam_box.pack(fill="both", expand=True)
+    video_lbl = tk.Label(cam_box, bg="black")
+    video_lbl.pack(fill="both", expand=True, padx=5, pady=5)
+
+    sample_count = [0]
+    face_detector = cv2.CascadeClassifier("haarcascade_default.xml")
+
+    def update_capture_feed():
+        if is_capturing[0] and sample_count[0] < 100:
+            ret, frame = cap[0].read()
+            if ret:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                faces = face_detector.detectMultiScale(gray, 1.3, 5)
+                
+                for (x, y, w, h) in faces:
+                    sample_count[0] += 1
+                    if not os.path.exists("TrainingImage"): os.makedirs("TrainingImage")
+                    cv2.imwrite(f"TrainingImage/{ents['user'].get()}.{sample_count[0]}.jpg", gray[y:y+h, x:x+w])
+                    cv2.rectangle(frame, (x, y), (x+w, y+h), (255, 0, 0), 2)
+                
+                img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img = Image.fromarray(img).resize((400, 300), Image.LANCZOS)
+                imgtk = ImageTk.PhotoImage(image=img)
+                video_lbl.imgtk = imgtk
+                video_lbl.configure(image=imgtk)
+                
+                if sample_count[0] < 100:
+                    container.after(10, update_capture_feed)
+                else:
+                    finish_registration()
+
+    def start_process():
+        if not ents['user'].get() or not ents['pass'].get():
+            messagebox.showerror("Error", "Enter Username and Password first!")
+            return
+        is_capturing[0] = True
+        cap[0] = cv2.VideoCapture(0)
+        update_capture_feed()
+
+    def finish_registration():
+        is_capturing[0] = False
+        if cap[0]: cap[0].release()
         
-        # Simple Date Validation
-        if len(dob) != 10 or dob[4] != '-' or dob[7] != '-':
-            messagebox.showerror("Format Error", "Please use YYYY-MM-DD format for date.")
-            return
-
-        if not u or not p:
-            messagebox.showerror("Error", "Username and Password are required!")
-            return
-
         try:
             db = get_db_connection()
             cursor = db.cursor()
+            hashed = bcrypt.hashpw(ents['pass'].get().encode('utf-8'), bcrypt.gensalt())
             
-            cursor.execute("INSERT INTO admins (username, password) VALUES (%s, %s)", (u, p))
-            admin_id = cursor.lastrowid 
+            cursor.execute("INSERT INTO admins (username, password) VALUES (%s, %s)", (ents['user'].get(), hashed))
+            admin_id = cursor.lastrowid
             
-            pic_folder = os.path.join("TrainingImage", "admin", str(admin_id))
-            if not os.path.exists(pic_folder): os.makedirs(pic_folder)
-            
-            # Handle Uploaded Pic
-            final_pic_path = os.path.join(pic_folder, "profile_pic.jpg")
-            if uploaded_pic_path.get():
-                shutil.copy(uploaded_pic_path.get(), final_pic_path)
-
-            cursor.execute("""
-                INSERT INTO admin_details (admin_id, first_name, last_name, dob, gender, address, phone_no, profile_pic_path) 
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            """, (admin_id, fname_ent.get(), lname_ent.get(), dob, gender_var.get(), addr_ent.get(), phone_ent.get(), final_pic_path))
+            sql = "INSERT INTO admin_details (admin_id, first_name, last_name, dob, gender, address, phone_no, profile_pic_path) VALUES (%s,%s,%s,%s,%s,%s,%s,%s)"
+            cursor.execute(sql, (admin_id, ents['fname'].get(), ents['lname'].get(), ents['dob'].get_date(), gender_var.get(), addr_txt.get("1.0", "end-1c"), ents['phone'].get(), selected_pic_relative_path.get()))
             
             db.commit()
             db.close()
-
-            reg_window.destroy()
-            messagebox.showinfo("Success", "Profile Saved! Opening camera for Face ID Training...")
-            
-            # Start camera (It will skip profile pic if already uploaded)
-            capture_faces(admin_id, u, skip_profile=(uploaded_pic_path.get() != ""))
-            train_image.TrainImages(new_id=admin_id, training_type="admin")
-            
+            messagebox.showinfo("Success", "Admin Registration Complete!")
+            back_to_dash()
         except Exception as e:
-            messagebox.showerror("Error", f"Database Error: {e}")
+            messagebox.showerror("Error", f"Database error: {str(e)}")
 
-    # --- Final Submit Button ---
-    submit_btn = tk.Button(reg_window, text="SUBMIT & START BIOMETRICS", bg="#2ecc71", fg="white", 
-                           font=("Arial", 12, "bold"), bd=0, cursor="hand2", command=submit_data)
-    submit_btn.pack(side="bottom", fill="x", padx=30, pady=20, ipady=12)
+    # --- Footer ---
+    footer = tk.Frame(container, bg="#f4f7f6")
+    footer.pack(side="bottom", fill="x", pady=20)
 
-def capture_faces(admin_id, username, skip_profile=False):
-    cam = cv2.VideoCapture(0)
-    detector = cv2.CascadeClassifier("haarcascade_default.xml")
-    save_path = os.path.join("TrainingImage", "admin", str(admin_id))
-    
-    sampleNum = 0
-    profile_captured = skip_profile # If uploaded, we skip webcam profile capture
-    
-    if not skip_profile:
-        messagebox.showinfo("Camera", "Look at the camera for your Profile Picture.")
+    def back_to_dash():
+        if cap[0]: cap[0].release()
+        root = container.winfo_toplevel()
+        import main
+        main.render_dashboard(root)
 
-    while True:
-        ret, img = cam.read()
-        if not ret: break
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        faces = detector.detectMultiScale(gray, 1.3, 5)
-        
-        for (x, y, w, h) in faces:
-            if not profile_captured:
-                cv2.imwrite(os.path.join(save_path, "profile_pic.jpg"), img[y:y+h, x:x+w])
-                profile_captured = True
-
-            sampleNum += 1
-            cv2.imwrite(os.path.join(save_path, f"{username}.{admin_id}.{sampleNum}.jpg"), gray[y:y+h, x:x+w])
-            cv2.rectangle(img, (x, y), (x+w, y+h), (255, 0, 0), 2)
-
-        cv2.imshow('Face Scanning...', img)
-        if cv2.waitKey(1) & 0xFF == ord('q') or sampleNum >= 50:
-            break
-    cam.release()
-    cv2.destroyAllWindows()
+    tk.Button(footer, text="⬅ Back", command=back_to_dash, bg="#95a5a6", fg="white", width=15).pack(side="left", padx=40)
+    tk.Button(footer, text="✅ REGISTER & CAPTURE", command=start_process, bg="#27ae60", fg="white", font=("Arial", 11, "bold"), width=25).pack(side="right", padx=40)

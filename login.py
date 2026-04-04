@@ -2,6 +2,7 @@ import tkinter as tk
 from tkinter import messagebox
 import cv2
 import os
+import bcrypt  # Import the hashing library
 from PIL import Image, ImageTk
 from db_config import get_db_connection
 
@@ -9,15 +10,15 @@ class LoginApp:
     def __init__(self):
         self.root = tk.Tk()
         self.root.title("Attendance System - Secure Login")
-        self.root.geometry("900x550")
-        self.root.configure(bg="#f0f2f5")
-        
+        self.root.geometry("1300x850")
+        self.root.resizable(True, True)
+
         self.cap = None
         self.is_camera_on = False
         self.recognizer = cv2.face.LBPHFaceRecognizer_create()
         self.face_cascade = cv2.CascadeClassifier("haarcascade_default.xml")
 
-        # --- UI Setup ---
+        # --- UI Setup (Same as yours) ---
         self.left_frame = tk.Frame(self.root, bg="#3498db", width=450)
         self.left_frame.pack(side="left", fill="both", expand=True)
         
@@ -48,6 +49,72 @@ class LoginApp:
         tk.Button(self.right_frame, text="Sign In With Face ID", bg="white", fg="#3498db", font=("Arial", 11, "bold"), 
                   bd=1, relief="solid", cursor="hand2", command=self.toggle_face_login).pack(fill="x", padx=60, pady=10, ipady=5)
 
+    # --- UPDATED: SECURE PASSWORD CHECK ---
+    def handle_password_login(self):
+        u, p = self.user_ent.get(), self.pass_ent.get()
+        
+        # Hardcoded Dev Fallback
+        if u == "admin" and p == "admin123":
+            self.launch_main()
+            return
+
+        try:
+            db = get_db_connection()
+            cursor = db.cursor()
+            # 1. Only fetch by username. Don't check password in SQL!
+            cursor.execute("SELECT password FROM admins WHERE username = %s", (u,))
+            result = cursor.fetchone()
+            
+            if result:
+                stored_hashed_pw = result[0]
+                
+                # 2. Use bcrypt to verify the plain input 'p' against the stored hash
+                # We encode to utf-8 because bcrypt works with bytes
+                if bcrypt.checkpw(p.encode('utf-8'), stored_hashed_pw.encode('utf-8')):
+                    self.status_lbl.config(text="Login Successful! Redirecting...", fg="#2ecc71")
+                    self.root.update()
+                    self.root.after(800, self.launch_main)
+                else:
+                    messagebox.showerror("Error", "Invalid Password")
+            else:
+                messagebox.showerror("Error", "Username not found")
+            
+            db.close()
+        except Exception as e:
+            messagebox.showerror("Connection Error", f"Database error: {e}")
+
+    # --- FIXED: CAMERA LOOP ---
+    def update_camera_frame(self):
+        if self.is_camera_on:
+            ret, frame = self.cap.read()
+            if ret:
+                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+                faces = self.face_cascade.detectMultiScale(gray, 1.2, 5)
+                
+                for (x, y, w, h) in faces:
+                    predicted_id, conf = self.recognizer.predict(gray[y:y+h, x:x+w])
+                    
+                    # Confidence < 100 is usually good, 50 is very strict
+                    if conf < 65: 
+                        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                        self.status_lbl.config(text="Verified! Welcome.", fg="#2ecc71")
+                        self.root.update()
+                        self.root.after(500, self.launch_main)
+                        return 
+                    else:
+                        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 255), 2)
+
+                # Convert frame to PhotoImage for Tkinter
+                img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                img = Image.fromarray(img).resize((450, 450), Image.LANCZOS)
+                imgtk = ImageTk.PhotoImage(image=img)
+                self.video_label.imgtk = imgtk
+                self.video_label.configure(image=imgtk)
+            
+            # This line is CRITICAL to keep the camera running
+            self.root.after(10, self.update_camera_frame)
+
+    # --- REST OF YOUR FUNCTIONS ---
     def toggle_face_login(self):
         trainer_path = "TrainingImageLabel/AdminTrainner.yml"
         if not os.path.exists(trainer_path):
@@ -64,62 +131,17 @@ class LoginApp:
         else:
             self.stop_camera()
 
-    def update_camera_frame(self):
-        if self.is_camera_on:
-            ret, frame = self.cap.read()
-            if ret:
-                gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-                faces = self.face_cascade.detectMultiScale(gray, 1.3, 5)
-                
-                for (x, y, w, h) in faces:
-                    predicted_id, conf = self.recognizer.predict(gray[y:y+h, x:x+w])
-                    
-                    if conf < 50:
-                        # Draw a green box to show recognition was successful
-                        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-                        self.status_lbl.config(text="Verified! Welcome.", fg="#2ecc71")
-                        self.root.update()
-                        
-                        # Close camera and move to dashboard after a tiny delay
-                        self.root.after(500, self.launch_main)
-                        return # Exit the function immediately
-
     def stop_camera(self):
         self.is_camera_on = False
         if self.cap: self.cap.release()
         self.video_label.config(image='')
         self.icon_lbl.place(relx=0.5, rely=0.4, anchor="center")
-        self.status_lbl.config(text="SECURE ACCESS")
-
-    def handle_password_login(self):
-        u, p = self.user_ent.get(), self.pass_ent.get()
-        try:
-            db = get_db_connection()
-            cursor = db.cursor()
-            cursor.execute("SELECT * FROM admins WHERE username = %s AND password = %s", (u, p))
-            
-            if cursor.fetchone() or (u == "admin" and p == "admin123"):
-                # Change the UI text to show progress
-                self.status_lbl.config(text="Login Successful! Redirecting...", fg="#2ecc71")
-                self.root.update() # Force UI to show the message
-                self.root.after(800, self.launch_main) # Wait 800ms then redirect
-            else:
-                messagebox.showerror("Error", "Invalid Credentials")
-            db.close()
-        except Exception as e:
-            # Fallback for demo if DB is off
-            if u == "admin" and p == "admin123":
-                self.launch_main()
-            else:
-                messagebox.showerror("Connection Error", "Check XAMPP/Database")
+        self.status_lbl.config(text="SECURE ACCESS", fg="white")
 
     def launch_main(self):
         self.stop_camera()
-        # Clear the window
         for widget in self.root.winfo_children():
             widget.destroy()
-        
-        # Load Dashboard from main.py
         import main
         main.render_dashboard(self.root)
 

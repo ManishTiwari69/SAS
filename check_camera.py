@@ -1,49 +1,65 @@
-def camer():
-    import cv2
-    import os
+import cv2
+import tkinter as tk
+from PIL import Image, ImageTk
 
-    # Check if cascade file exists to prevent silent failure
-    cascade_path = 'haarcascade_default.xml'
-    if not os.path.exists(cascade_path):
-        print(f"Error: {cascade_path} not found in the current directory.")
-        return
+def camer(container):
+    # 1. Clear the dashboard content area
+    for widget in container.winfo_children():
+        widget.destroy()
 
-    cascade_face = cv2.CascadeClassifier(cascade_path)
-    cap = cv2.VideoCapture(0)
+    # 2. UI Setup
+    header = tk.Frame(container, bg="#1a1c23", height=50)
+    header.pack(side="top", fill="x")
+    tk.Label(header, text="📷 CAMERA SYSTEM CHECK", font=("Arial", 14, "bold"), 
+             bg="#1a1c23", fg="#00d084").pack(pady=10)
 
-    # Optional: Set resolution (helpful for consistent performance)
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    # Label where the video will actually show
+    video_display = tk.Label(container, bg="black")
+    video_display.pack(pady=20, padx=20)
 
-    print("Webcam started. Press 'q' to exit.")
+    # 3. Camera Setup
+    # Use a list for 'cap' so it's accessible inside the nested function
+    cap = [cv2.VideoCapture(0)]
+    face_cascade = cv2.CascadeClassifier("haarcascade_default.xml")
 
-    while True:
-        ret, img = cap.read()
-        
-        # If camera fails to read, break the loop instead of crashing
-        if not ret:
-            print("Error: Could not read frame from camera.")
-            break
+    def update_frame():
+        if not cap[0] or not cap[0].isOpened():
+            return
 
-        gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        faces = cascade_face.detectMultiScale(
-            gray, 
-            scaleFactor=1.3, 
-            minNeighbors=5, 
-            minSize=(30, 30),
-            flags=cv2.CASCADE_SCALE_IMAGE
-        )
+        ret, frame = cap[0].read()
+        if ret:
+            # Mirror the frame for a more natural feel
+            frame = cv2.flip(frame, 1)
+            gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            faces = face_cascade.detectMultiScale(gray, 1.3, 5)
 
-        for (a, b, c, d) in faces:
-            # Draw rectangle
-            cv2.rectangle(img, (a, b), (a + c, b + d), (10, 159, 255), 2)
-            # Add a label (useful for your attendance system later)
-            cv2.putText(img, "Face Detected", (a, b-10), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (10, 159, 255), 2)
+            for (x, y, w, h) in faces:
+                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 208, 132), 2)
 
-        cv2.imshow('Webcam Check', img)
+            # Convert OpenCV BGR to RGB for PIL
+            cv_img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(cv_img).resize((700, 500), Image.LANCZOS)
+            imgtk = ImageTk.PhotoImage(image=img)
+            
+            # Update the label
+            video_display.imgtk = imgtk
+            video_display.configure(image=imgtk)
 
-        if cv2.waitKey(1) & 0xFF == ord('q'):
-            break
+            # Schedule the next update in 10ms (This replaces 'while True')
+            video_display.after(10, update_frame)
 
-    cap.release()
-    cv2.destroyAllWindows()
+    # 4. Cleanup Function
+    def stop_camera():
+        if cap[0]:
+            cap[0].release()
+            cap[0] = None
+        # Go back to the dashboard overview
+        import main
+        main.render_dashboard(container.winfo_toplevel())
+
+    # Stop Button
+    tk.Button(container, text="❌ Close Camera", command=stop_camera, 
+              bg="#e74c3c", fg="white", font=("Arial", 11, "bold"), width=20).pack(pady=10)
+
+    # Start the loop
+    update_frame()
