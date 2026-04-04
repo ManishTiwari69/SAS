@@ -9,6 +9,19 @@ import check_camera
 import admin_register
 import recognize
 import view_attendance
+import sys
+from session import user_session
+
+if not user_session.is_logged_in:
+    # If someone tries: py Main.py directly
+    print("⛔ Access Denied: Please login via login.py")
+    
+    # Optional: If you want a popup before closing
+    import tkinter as tk
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showerror("Security", "Please login to access the system.")
+    sys.exit() # Kill the process immediately
 
 class AdminDashboard:
     def __init__(self, root, admin_id):
@@ -72,7 +85,7 @@ class AdminDashboard:
         self.add_menu_item("👨‍🎓 Register Student", lambda: register_student(self.content_area))
         self.add_menu_item("✏️ Update Student", lambda: update_student.update_student(self.content_area))
         self.add_menu_item("🛡️ Recognize Attendance", lambda: recognize.recognize_attendance(self.content_area))
-        self.add_menu_item("📊 Attendance Records", view_attendance.show_attendance)
+        self.add_menu_item("📊 Attendance Records", lambda: view_attendance.show_attendance(self.content_area))
         self.add_menu_item("🚪 Logout", self.root.quit)
 
         # --- TOPBAR ---

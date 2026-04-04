@@ -5,6 +5,7 @@ import os
 import bcrypt  # Import the hashing library
 from PIL import Image, ImageTk
 from db_config import get_db_connection
+from session import user_session  # Import the session instance
 
 class LoginApp:
     def __init__(self):
@@ -140,8 +141,17 @@ class LoginApp:
 
     def launch_main(self):
         self.stop_camera()
+
+        user_session.is_logged_in = True
+        user_session.current_user = self.user_ent.get() if self.user_ent.get() else "Admin_FaceID"
+        
+        # 3. Clear the window and render the main dashboard
         for widget in self.root.winfo_children():
             widget.destroy()
+
+        for widget in self.root.winfo_children():
+            widget.destroy()
+            
         import main
         main.render_dashboard(self.root)
 

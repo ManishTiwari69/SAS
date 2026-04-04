@@ -2,14 +2,16 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from db_config import get_db_connection
 
-def show_attendance():
-    # 1. Setup the Window
-    view_window = tk.Toplevel()
-    view_window.title("Attendance Records")
-    view_window.geometry("800x400")
-    view_window.configure(bg="#2c3e50")
+def show_attendance(container): # 1. Accept the container
+    # 2. Clear the previous content in the main dashboard area
+    for widget in container.winfo_children():
+        widget.destroy()
 
-    title = tk.Label(view_window, text="DAILY ATTENDANCE LOG", 
+    # 3. Use 'container' as the parent instead of 'view_window'
+    main_frame = tk.Frame(container, bg="#2c3e50")
+    main_frame.pack(fill="both", expand=True)
+
+    title = tk.Label(main_frame, text="DAILY ATTENDANCE LOGS", 
                      bg="#2c3e50", fg="white", font=('times', 20, 'bold'))
     title.pack(pady=10)
 
@@ -19,16 +21,17 @@ def show_attendance():
     style.configure("Treeview", background="#ecf0f1", foreground="black", rowheight=25, fieldbackground="#ecf0f1")
     style.map("Treeview", background=[('selected', '#3498db')])
 
-    tree_frame = tk.Frame(view_window)
+    tree_frame = tk.Frame(main_frame)
     tree_frame.pack(pady=10, padx=20, fill="both", expand=True)
 
-    columns = ("ID", "Name", "Date", "Time")
+    # Updated columns to match your new table structure + Student Name
+    columns = ("ID", "Name", "Status", "Date", "Time")
     tree = ttk.Treeview(tree_frame, columns=columns, show="headings")
     
     # Define Headings
     for col in columns:
         tree.heading(col, text=col)
-        tree.column(col, anchor="center")
+        tree.column(col, anchor="center", width=120)
     
     tree.pack(side="left", fill="both", expand=True)
 
@@ -42,12 +45,14 @@ def show_attendance():
         db = get_db_connection()
         cursor = db.cursor()
         
-        # We use a JOIN to get the Name from the students table
+        # Updated Query: 
+        # Joining attendance_logs with student_profiles to get the full name
         query = """
-            SELECT a.student_id, s.name, a.date, a.time 
-            FROM attendance_log a 
-            JOIN students s ON a.student_id = s.id 
-            ORDER BY a.date DESC, a.time DESC
+            SELECT a.student_id, CONCAT(p.first_name, ' ', p.last_name) AS full_name, 
+                   a.status, a.log_date, a.log_time 
+            FROM attendance_logs a 
+            JOIN student_profiles p ON a.student_id = p.student_id 
+            ORDER BY a.log_date DESC, a.log_time DESC
         """
         cursor.execute(query)
         rows = cursor.fetchall()
@@ -60,6 +65,6 @@ def show_attendance():
         messagebox.showerror("DB Error", f"Could not fetch records: {e}")
 
     # Close button
-    btn_close = tk.Button(view_window, text="Close", command=view_window.destroy, 
-                          bg="#e74c3c", fg="white", width=20)
-    btn_close.pack(pady=10)
+    btn_close = tk.Button(view_window, text="Close Window", command=view_window.destroy, 
+                          bg="#e74c3c", fg="white", font=("Arial", 10, "bold"), width=20)
+    btn_close.pack(pady=15)
