@@ -42,6 +42,16 @@ def register_student(container):
     scrollable_frame = tk.Frame(canvas, bg="white")
 
     scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+    # 1. Define the scroll function
+    def _on_mousewheel(event):
+        # For Windows, we use event.delta
+        canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+
+    # 2. Bind the event to the canvas and the frame
+    # This ensures it scrolls even if your mouse is over a label or entry
+    canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
     canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
     canvas.pack(side="left", fill="both", expand=True)
@@ -312,6 +322,7 @@ def register_student(container):
                              ents['p_name'].get(), ents['p_phone'].get(), ents['p_rel'].get())
             
             cursor.execute(academic_sql, academic_data)
+            db.commit()
 
             try:
                 TrainImages(new_id=s_id, training_type="student")

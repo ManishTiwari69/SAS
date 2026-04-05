@@ -3,6 +3,7 @@ env/
 venv/
 __pycache__/
 .vscode/
-trainingImages/
+trainingImage/
 TrainingImagelabels/
 TrainingImageLabel/
+student_Profiles/

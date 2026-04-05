@@ -112,3 +112,61 @@ class Validator:
             5: ("#27ae60", "Very Strong")
         }
         return strength_map.get(score, ("#e74c3c", "Weak"))
+    
+
+class AdminValidator:
+    @staticmethod
+    def validate_admin(data):
+        """
+        Validates admin registration data.
+        'data' should be a dictionary containing: 
+        user, pass, fname, lname, phone, addr, and pic_path
+        """
+        errors = {}
+
+        # 1. Username Validation
+        if not data.get('user'):
+            errors['user'] = "Username is required"
+        elif len(data['user']) < 4:
+            errors['user'] = "Must be at least 4 characters"
+
+        # 2. Password Validation (The specific multi-line requirement)
+        password = data.get('pass', '')
+        # Regex: Upper, Lower, Digit, Special, Min 8 chars
+        password_criteria = r"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$"
+        
+        if not password:
+            errors['pass'] = "Password is required"
+        elif not re.match(password_criteria, password):
+            errors['pass'] = (
+                "Password is too weak!\n"
+                "Must include:\n"
+                "• Uppercase & Lowercase letters\n"
+                "• At least one Number\n"
+                "• Special Character (!@#$%^&*)"
+            )
+
+        # 3. Name Validations
+        if not data.get('fname'):
+            errors['fname'] = "First name is required"
+        if not data.get('lname'):
+            errors['lname'] = "Last name is required"
+
+        # 4. Phone Validation
+        phone = data.get('phone', '')
+        if not phone:
+            errors['phone'] = "Phone number is required"
+        elif not phone.isdigit():
+            errors['phone'] = "Must contain only digits"
+        elif len(phone) < 10:
+            errors['phone'] = "Must be at least 10 digits"
+
+        # 5. Address Validation
+        if not data.get('email') or len(data['email'].strip()) < 5:
+            errors['email'] = "Please enter a valid Email address example@domain.com"
+
+        # 6. Profile Picture Validation
+        if not data.get('pic_path'):
+            errors['pic_path'] = "Profile picture is required"
+
+        return errors
