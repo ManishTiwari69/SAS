@@ -1,9 +1,11 @@
 
 env/
 venv/
+Attendance/
 __pycache__/
 .vscode/
 trainingImage/
 TrainingImagelabels/
 TrainingImageLabel/
 student_Profiles/
+StudentTrainingImage/

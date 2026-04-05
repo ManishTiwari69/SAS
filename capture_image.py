@@ -6,7 +6,7 @@ from PIL import Image, ImageTk
 from db_config import get_db_connection
 from tkinter import simpledialog, messagebox
 
-def register_student_camera(container):
+def register_student_camera(container, on_close_callback):
     """Refactored version of takeImages to show in the dashboard window"""
     
     # 1. Clear the content area

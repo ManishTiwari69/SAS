@@ -38,7 +38,7 @@ class AdminDashboard:
 
     def redirect_to_login(self, root):
         """Force redirect back to login screen with a message"""
-        user_session.login_message = "⚠️ Access Denied: Please Login First"
+        user_session.login_message = "⚠️Please Login "
         for widget in root.winfo_children():
             widget.destroy()
         import login
@@ -85,9 +85,9 @@ class AdminDashboard:
 
         # Sidebar Buttons
         self.add_menu_item("🏠 Dashboard Overview", self.render_overview)
-        self.add_menu_item("📷 Check Camera", lambda: check_camera.camer(self.content_area))
+        self.add_menu_item("📷 Check Camera", lambda: check_camera.camer(self.content_area, self.render_overview))
         self.add_menu_item("🔐 Register ADMIN", lambda: admin_register.register_admin(self.content_area))
-        self.add_menu_item("👨‍🎓 Register Student", lambda: register_student(self.content_area))
+        self.add_menu_item("👨‍🎓 Register Student", lambda: register_student(self.content_area, self.render_overview))
         self.add_menu_item("✏️ Update Student", lambda: update_student.update_student(self.content_area))
         self.add_menu_item("🛡️ Recognize", lambda: recognize.recognize_attendance(self.content_area))
         self.add_menu_item("📊 Records", lambda: view_attendance.show_attendance(self.content_area))
@@ -113,9 +113,11 @@ class AdminDashboard:
 
     def add_menu_item(self, text, command):
         def wrapper():
-            for widget in self.content_area.winfo_children():
-                widget.destroy()
-            command()
+    # Check if the content_area actually exists in the Tcl/Tk interpreter
+            if self.content_area.winfo_exists():
+                for widget in self.content_area.winfo_children():
+                    widget.destroy()
+                command()
 
         btn = tk.Button(self.sidebar, text=f"  {text}", font=("Arial", 11), bg=self.SIDEBAR_COLOR, 
                         fg="white", bd=0, activebackground="#2d2f39", activeforeground=self.PRIMARY_COLOR,
@@ -143,8 +145,7 @@ class AdminDashboard:
                  bg=color, fg="#777" if color=="#ffffff" else "white").pack(pady=(25,5))
         tk.Label(card, text=str(value), font=("Arial", 28, "bold"), bg=color, fg=fg_color).pack()
 
-def render_dashboard(window, admin_id=1):
-    return AdminDashboard(window, admin_id)
+
 
 if __name__ == "__main__":
     root = tk.Tk()

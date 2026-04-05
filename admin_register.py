@@ -31,8 +31,12 @@ def register_admin(container):
 
     # 1. Define the scroll function
     def _on_mousewheel(event):
-        # For Windows, we use event.delta
-        canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        try:
+            # These lines MUST be indented 4 spaces further than 'try'
+            if canvas.winfo_exists():
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        except Exception:
+            pass
 
     # 2. Bind the event to the canvas and the frame
     # This ensures it scrolls even if your mouse is over a label or entry

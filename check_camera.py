@@ -1,8 +1,9 @@
 import cv2
 import tkinter as tk
 from PIL import Image, ImageTk
+# REMOVED: from main import AdminDashboard (This prevents the Circular Import error)
 
-def camer(container):
+def camer(container, on_close_callback): # FIXED: Added on_close_callback parameter
     # 1. Clear the dashboard content area
     for widget in container.winfo_children():
         widget.destroy()
@@ -18,17 +19,20 @@ def camer(container):
     video_display.pack(pady=20, padx=20)
 
     # 3. Camera Setup
-    # Use a list for 'cap' so it's accessible inside the nested function
     cap = [cv2.VideoCapture(0)]
-    face_cascade = cv2.CascadeClassifier("haarcascade_default.xml")
+    # Ensure this file exists in your project root!
+    face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
 
     def update_frame():
-        if not cap[0] or not cap[0].isOpened():
+        # Safety check: Stop the loop if the user switched menus
+        if not video_display.winfo_exists() or cap[0] is None or not cap[0].isOpened():
+            if cap[0]:
+                cap[0].release()
+                cap[0] = None
             return
 
         ret, frame = cap[0].read()
         if ret:
-            # Mirror the frame for a more natural feel
             frame = cv2.flip(frame, 1)
             gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
             faces = face_cascade.detectMultiScale(gray, 1.3, 5)
@@ -36,26 +40,24 @@ def camer(container):
             for (x, y, w, h) in faces:
                 cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 208, 132), 2)
 
-            # Convert OpenCV BGR to RGB for PIL
             cv_img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-            img = Image.fromarray(cv_img).resize((700, 500), Image.LANCZOS)
+            # Use Resampling.LANCZOS for modern Pillow versions
+            img = Image.fromarray(cv_img).resize((700, 500), Image.Resampling.LANCZOS)
             imgtk = ImageTk.PhotoImage(image=img)
             
-            # Update the label
             video_display.imgtk = imgtk
             video_display.configure(image=imgtk)
 
-            # Schedule the next update in 10ms (This replaces 'while True')
             video_display.after(10, update_frame)
 
     # 4. Cleanup Function
     def stop_camera():
-        if cap[0]:
+        if cap[0]: 
             cap[0].release()
             cap[0] = None
-        # Go back to the dashboard overview
-        import main
-        main.render_dashboard(container.winfo_toplevel())
+        
+        # Trigger the callback passed from main.py to refresh the dashboard stats
+        on_close_callback() 
 
     # Stop Button
     tk.Button(container, text="❌ Close Camera", command=stop_camera, 

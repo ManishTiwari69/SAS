@@ -14,7 +14,7 @@ UPLOAD_DIR = "Student_Profiles"
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
-def register_student(container):
+def register_student(container, on_back_callback): # Added on_back_callback
     for widget in container.winfo_children():
         widget.destroy()
 
@@ -22,7 +22,8 @@ def register_student(container):
     is_capturing = [False]
     cap = [None]
     sample_count = [0]
-    face_detector = cv2.CascadeClassifier("haarcascade_default.xml")
+    # Standardize path for face detector
+    face_detector = cv2.CascadeClassifier(cv2.data.haarcascades + "haarcascade_frontalface_default.xml")
     selected_pic_relative_path = tk.StringVar()
 
     # --- UI Elements ---
@@ -42,6 +43,22 @@ def register_student(container):
     scrollable_frame = tk.Frame(canvas, bg="white")
 
     scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
+
+    # FIXED: Added winfo_exists check to prevent crash on menu switch
+    def _on_mousewheel(event):
+        try:
+            if canvas.winfo_exists():
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        except:
+            pass
+
+    # Bind scroll specifically to this canvas area
+    canvas.bind_all("<MouseWheel>", _on_mousewheel)
+
+    canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+    canvas.configure(yscrollcommand=scrollbar.set)
+    canvas.pack(side="left", fill="both", expand=True)
+    scrollbar.pack(side="right", fill="y")
 
     # 1. Define the scroll function
     def _on_mousewheel(event):
@@ -290,7 +307,9 @@ def register_student(container):
         
     def save_to_db():
         is_capturing[0] = False
-        if cap[0]: cap[0].release()
+        if cap[0]: 
+            cap[0].release()
+            cap[0] = None
         
         try:
             db = get_db_connection()
@@ -299,10 +318,12 @@ def register_student(container):
             password_plain = ents['pass'].get()
             hashed = bcrypt.hashpw(password_plain.encode('utf-8'), bcrypt.gensalt())
             
+            # Step 1: User account
             cursor.execute("INSERT INTO students (username, password) VALUES (%s, %s)", 
                            (ents['user'].get(), hashed))
             s_id = cursor.lastrowid 
 
+            # Step 2: Personal Profile
             profile_sql = """INSERT INTO student_profiles 
                              (student_id, first_name, middle_name, last_name, dob, gender, phone, email, curr_address, perm_address, photo_path) 
                              VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)"""
@@ -314,6 +335,7 @@ def register_student(container):
             
             cursor.execute(profile_sql, profile_data)
 
+            # Step 3: Academic Info
             academic_sql = """INSERT INTO student_academic 
                               (student_id, acad_year, faculty, course, guardian_name, guardian_phone, relationship) 
                               VALUES (%s,%s,%s,%s,%s,%s,%s)"""
@@ -324,31 +346,42 @@ def register_student(container):
             cursor.execute(academic_sql, academic_data)
             db.commit()
 
+            # Step 4: Training (Passing the ID specifically)
             try:
                 TrainImages(new_id=s_id, training_type="student")
             except Exception as e:
-                print(f"Training failed: {e}") 
-            # --------------------------
+                print(f"Training failed but record saved: {e}") 
 
-            messagebox.showinfo("Success", f"Student {ents['fname'].get()} registered and trained successfully!")
-            back_to_dash()
+            messagebox.showinfo("Success", f"Student {ents['fname'].get()} registered successfully!")
+            on_back_callback() # Use the callback to refresh dash
 
         except Exception as e:
             if 'db' in locals():
                 db.rollback() 
             messagebox.showerror("Database Error", f"Could not save: {str(e)}")
+        finally:
+            if 'db' in locals():
+                db.close()
 
     # Footer
     footer = tk.Frame(container, bg="#f4f7f6")
     footer.pack(side="bottom", fill="x", pady=10)
 
     def back_to_dash():
-        if cap[0]: cap[0].release()
-        # Find the root window (tk.Tk) from the container
-        root = container.winfo_toplevel()
-        import main
-        # Passing root to render_dashboard as expected by your login logic
-        main.render_dashboard(root)
+        # SAFETY: If camera is running, kill it before leaving
+        is_capturing[0] = False
+        if cap[0] and cap[0].isOpened():
+            cap[0].release()
+            cap[0] = None
+        
+        canvas.unbind_all("<MouseWheel>")
+        on_back_callback() 
 
-    tk.Button(footer, text="⬅ Cancel", command=back_to_dash, bg="#95a5a6", fg="white", width=15).pack(side="left", padx=40)
-    tk.Button(footer, text="🚀 ENROLL STUDENT", command=start_registration, bg="#2980b9", fg="white", font=("Arial", 11, "bold"), width=25).pack(side="right", padx=40)
+    # Footer Buttons
+    footer = tk.Frame(container, bg="#f4f7f6")
+    footer.pack(side="bottom", fill="x", pady=10)
+
+    tk.Button(footer, text="⬅ Cancel", command=back_to_dash, 
+              bg="#95a5a6", fg="white", width=15).pack(side="left", padx=40)
+    tk.Button(footer, text="🚀 ENROLL STUDENT", command=start_registration, 
+              bg="#2980b9", fg="white", font=("Arial", 11, "bold"), width=25).pack(side="right", padx=40)

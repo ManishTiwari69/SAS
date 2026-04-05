@@ -73,24 +73,26 @@ class LoginApp:
     def handle_password_login(self):
         u, p = self.user_ent.get(), self.pass_ent.get()
         
-       
         if Validator.is_empty({"Username": u, "Password": p}):
             return 
-        # ---------------------------
 
         try:
             db = get_db_connection()
             cursor = db.cursor()
             
-            # Fetch by username
-            cursor.execute("SELECT password FROM admins WHERE username = %s", (u,))
+            # CHANGE: Select both admin_id and password
+            cursor.execute("SELECT admin_id, password FROM admins WHERE username = %s", (u,))
             result = cursor.fetchone()
             
             if result:
-                stored_hashed_pw = result[0]
+                # result[0] is admin_id, result[1] is password
+                db_admin_id = result[0]
+                stored_hashed_pw = result[1]
                 
-                # Bcrypt verification
                 if bcrypt.checkpw(p.encode('utf-8'), stored_hashed_pw.encode('utf-8')):
+                    # SAVE THE ID HERE
+                    self.logged_in_id = db_admin_id 
+                    
                     self.status_lbl.config(text="Login Successful! Redirecting...", fg="#2ecc71")
                     self.root.update()
                     self.root.after(800, self.launch_main)
@@ -114,8 +116,10 @@ class LoginApp:
                 for (x, y, w, h) in faces:
                     predicted_id, conf = self.recognizer.predict(gray[y:y+h, x:x+w])
                     
-                    # Confidence < 100 is usually good, 50 is very strict
                     if conf < 65: 
+                        # SAVE THE ID FROM THE FACE SCAN
+                        self.logged_in_id = predicted_id 
+                        
                         cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
                         self.status_lbl.config(text="Verified! Welcome.", fg="#2ecc71")
                         self.root.update()
@@ -173,11 +177,10 @@ class LoginApp:
         # 4. Import using the EXACT filename (usually lowercase 'main')
         try:
             import main 
-            main.render_dashboard(self.root)
+            main.AdminDashboard(self.root, admin_id=self.logged_in_id)
         except ModuleNotFoundError:
-            # If your file is definitely 'Main.py', use this instead:
             import Main
-            Main.render_dashboard(self.root)
+            Main.AdminDashboard(self.root, admin_id=self.logged_in_id)
 
     def run(self):
         self.root.mainloop()
