@@ -5,8 +5,8 @@ from db_config import get_db_connection
 from datetime import date
 import sys
 import os
-
-# Ensure these match your filenames EXACTLY
+from db_config import check_db_status 
+from edit_admin import edit_admin
 import update_student
 from student_register import register_student
 import check_camera
@@ -87,9 +87,10 @@ class AdminDashboard:
         self.add_menu_item("🏠 Dashboard Overview", self.render_overview)
         self.add_menu_item("📷 Check Camera", lambda: check_camera.camer(self.content_area, self.render_overview))
         self.add_menu_item("🔐 Register ADMIN", lambda: admin_register.register_admin(self.content_area))
+        self.add_menu_item("⚙️ Edit Profile", lambda: edit_admin(self.content_area, self.admin_id, self.render_overview))
         self.add_menu_item("👨‍🎓 Register Student", lambda: register_student(self.content_area, self.render_overview))
         self.add_menu_item("✏️ Update Student", lambda: update_student.update_student(self.content_area))
-        self.add_menu_item("🛡️ Recognize", lambda: recognize.recognize_attendance(self.content_area))
+        self.add_menu_item("🛡️ Recognize", lambda: recognize.recognize_attendance(self.root, self.render_overview))
         self.add_menu_item("📊 Records", lambda: view_attendance.show_attendance(self.content_area))
         self.add_menu_item("🚪 Logout", self.handle_logout)
 
@@ -148,7 +149,19 @@ class AdminDashboard:
 
 
 if __name__ == "__main__":
+   
+    
+    if not check_db_status():
+        temp_root = tk.Tk()
+        temp_root.withdraw() 
+        messagebox.showerror("Database Connection Error", 
+                             "Could not connect to MySQL server.\n"
+                             "Please ensure XAMPP/MySQL is running and try again.")
+        temp_root.destroy()
+        sys.exit()
+
     root = tk.Tk()
-    root.geometry("1300x850")
-    app = AdminDashboard(root, admin_id=1)
+    # In a real scenario, this admin_id would come from your login logic
+    # For now, we pass 1 to test the dashboard
+    app = AdminDashboard(root, admin_id=1) 
     root.mainloop()
