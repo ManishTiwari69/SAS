@@ -5,7 +5,8 @@ import os
 import bcrypt  # Import the hashing library
 from PIL import Image, ImageTk
 from db_config import get_db_connection
-from session import user_session  # Import the session instance
+from session import user_session 
+from validate import Validator # Import the session instance
 
 class LoginApp:
     def __init__(self, existing_root=None):
@@ -72,23 +73,23 @@ class LoginApp:
     def handle_password_login(self):
         u, p = self.user_ent.get(), self.pass_ent.get()
         
-        # Hardcoded Dev Fallback
-        if u == "admin" and p == "admin123":
-            self.launch_main()
-            return
+       
+        if Validator.is_empty({"Username": u, "Password": p}):
+            return 
+        # ---------------------------
 
         try:
             db = get_db_connection()
             cursor = db.cursor()
-            # 1. Only fetch by username. Don't check password in SQL!
+            
+            # Fetch by username
             cursor.execute("SELECT password FROM admins WHERE username = %s", (u,))
             result = cursor.fetchone()
             
             if result:
                 stored_hashed_pw = result[0]
                 
-                # 2. Use bcrypt to verify the plain input 'p' against the stored hash
-                # We encode to utf-8 because bcrypt works with bytes
+                # Bcrypt verification
                 if bcrypt.checkpw(p.encode('utf-8'), stored_hashed_pw.encode('utf-8')):
                     self.status_lbl.config(text="Login Successful! Redirecting...", fg="#2ecc71")
                     self.root.update()

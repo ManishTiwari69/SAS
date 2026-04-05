@@ -8,18 +8,15 @@ import shutil
 import bcrypt
 from db_config import get_db_connection
 from train_image import TrainImages 
+from validate import Validator
 
 UPLOAD_DIR = "Student_Profiles"
 if not os.path.exists(UPLOAD_DIR):
     os.makedirs(UPLOAD_DIR)
 
 def register_student(container):
-    # 1. Clear the content area
     for widget in container.winfo_children():
         widget.destroy()
-
-    # REMOVED: container.title, container.geometry, container.configure
-    # These belonged to the root window; the Dashboard handles them now.
 
     # Variables for Face Capture
     is_capturing = [False]
@@ -28,17 +25,15 @@ def register_student(container):
     face_detector = cv2.CascadeClassifier("haarcascade_default.xml")
     selected_pic_relative_path = tk.StringVar()
 
-    # --- Header (Inside the container) ---
+    # --- UI Elements ---
     header = tk.Frame(container, bg="#2c3e50", height=60)
     header.pack(side="top", fill="x")
     tk.Label(header, text="🎓 NEW STUDENT ENROLLMENT", font=("Arial", 16, "bold"), 
              bg="#2c3e50", fg="white").pack(pady=15)
 
-    # --- Main Container ---
     main_frame = tk.Frame(container, bg="#f4f7f6")
     main_frame.pack(fill="both", expand=True, padx=20, pady=10)
 
-    # LEFT COLUMN (Scrollable Form)
     left_column = tk.Frame(main_frame, bg="#f4f7f6", width=500)
     left_column.pack(side="left", fill="both", expand=True, padx=5)
 
@@ -49,29 +44,39 @@ def register_student(container):
     scrollable_frame.bind("<Configure>", lambda e: canvas.configure(scrollregion=canvas.bbox("all")))
     canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
     canvas.configure(yscrollcommand=scrollbar.set)
-
     canvas.pack(side="left", fill="both", expand=True)
     scrollbar.pack(side="right", fill="y")
 
+    # --- Dictionaries for logic ---
     ents = {}
+    err_lbls = {} 
 
+    # --- Helper Functions ---
     def add_section(text):
-        lbl = tk.Label(scrollable_frame, text=text, font=("Arial", 11, "bold"), bg="#ecf0f1", fg="#2c3e50", anchor="w")
+        lbl = tk.Label(scrollable_frame, text=text, font=("Arial", 11, "bold"), 
+                       bg="#ecf0f1", fg="#2c3e50", anchor="w")
         lbl.pack(fill="x", pady=(15, 5), ipady=3)
 
-    def create_row(label, is_pass=False):
+    def create_row(label, key, is_pass=False):
         row = tk.Frame(scrollable_frame, bg="white")
-        row.pack(fill="x", pady=2)
+        row.pack(fill="x", pady=(5, 0))
+        
         tk.Label(row, text=label, bg="white", width=20, anchor="w").pack(side="left", padx=5)
         entry = tk.Entry(row, font=("Arial", 10), bg="#f0f2f5", show="*" if is_pass else "")
         entry.pack(side="left", fill="x", expand=True, padx=5)
+        
+        # Red error message label
+        err_msg = tk.Label(scrollable_frame, text="", font=("Arial", 8), fg="#e74c3c", bg="white")
+        err_msg.pack(anchor="w", padx=165)
+        err_lbls[key] = err_msg 
+        
         return entry
 
     # --- 1. Personal Info ---
     add_section("1. Personal Information")
-    ents['fname'] = create_row("First Name:")
-    ents['mname'] = create_row("Middle Name:")
-    ents['lname'] = create_row("Last Name:")
+    ents['fname'] = create_row("First Name:", "fname")
+    ents['mname'] = create_row("Middle Name:", "mname")
+    ents['lname'] = create_row("Last Name:", "lname")
     
     dob_row = tk.Frame(scrollable_frame, bg="white")
     dob_row.pack(fill="x", pady=2)
@@ -83,32 +88,95 @@ def register_student(container):
     gender_row.pack(fill="x", pady=2)
     tk.Label(gender_row, text="Gender:", bg="white", width=20, anchor="w").pack(side="left", padx=5)
     gender_var = tk.StringVar(value="Male")
-    ents['gender_var'] = gender_var # Store in ents for DB access
+    ents['gender_var'] = gender_var 
     ttk.Combobox(gender_row, textvariable=gender_var, values=["Male", "Female", "Other"]).pack(side="left", padx=5)
 
     # --- 2. Contact Info ---
     add_section("2. Contact Information")
-    ents['curr_addr'] = create_row("Current Address:")
-    ents['perm_addr'] = create_row("Permanent Address:")
-    ents['phone'] = create_row("Mobile Number:")
-    ents['email'] = create_row("Email Address:")
+    ents['curr_addr'] = create_row("Current Address:", "curr_addr")
+    ents['perm_addr'] = create_row("Permanent Address:", "perm_addr")
+    ents['phone'] = create_row("Mobile Number:", "phone")
+    ents['email'] = create_row("Email Address:", "email")
 
     # --- 3. Academic Details ---
     add_section("3. Academic Details")
-    ents['year'] = create_row("Academic Year (e.g. 2026):")
-    ents['faculty'] = create_row("Faculty:")
-    ents['course'] = create_row("Course:")
+    
+    # Academic Year Dropdown
+    year_row = tk.Frame(scrollable_frame, bg="white")
+    year_row.pack(fill="x", pady=2)
+    tk.Label(year_row, text="Academic Year:", bg="white", width=20, anchor="w").pack(side="left", padx=5)
+    
+    year_var = tk.StringVar(value="2026")
+    years = [str(y) for y in range(2024, 2031)]
+    year_menu = ttk.OptionMenu(year_row, year_var, years[2], *years)
+    year_menu.pack(side="left", padx=5)
+    ents['year'] = year_var # Store the variable so .get() still works
 
-    # --- 4. Emergency Contact ---
+    # Data Mapping
+    faculty_map = {
+        "Management": ["BBA", "BBM", "BHM", "BTTM", "BIM"],
+        "Humanities & Social Sciences": ["BA", "MA in Sociology", "Economics", "BCA"],
+        "Law": ["LL.B.", "B.A.LL.B.", "LL.M."]
+    }
+
+    def update_courses(*args):
+        selected_fac = faculty_var.get()
+        courses = faculty_map.get(selected_fac, [])
+        course_menu['values'] = courses
+        course_var.set(courses[0] if courses else "")
+
+    # Faculty Radio Buttons
+    add_section("Faculty & Course Selection")
+    faculty_var = tk.StringVar(value="Management")
+    ents['faculty'] = faculty_var
+    
+    fac_frame = tk.Frame(scrollable_frame, bg="white")
+    fac_frame.pack(fill="x", pady=5)
+    
+    for fac in faculty_map.keys():
+        rb = tk.Radiobutton(fac_frame, text=fac, variable=faculty_var, value=fac, 
+                            bg="white", command=update_courses)
+        rb.pack(side="left", padx=10)
+
+    # Course Dropdown
+    course_row = tk.Frame(scrollable_frame, bg="white")
+    course_row.pack(fill="x", pady=5)
+    tk.Label(course_row, text="Select Course:", bg="white", width=20, anchor="w").pack(side="left", padx=5)
+    
+    course_var = tk.StringVar()
+    ents['course'] = course_var
+    course_menu = ttk.Combobox(course_row, textvariable=course_var, state="readonly")
+    course_menu.pack(side="left", padx=5)
+    
+    # Initialize courses based on default faculty
+    update_courses()
+
+    # --- 4. Parent/Guardian Details ---
     add_section("4. Parent/Guardian Details")
-    ents['p_name'] = create_row("Guardian Name:")
-    ents['p_phone'] = create_row("Guardian Phone:")
-    ents['p_rel'] = create_row("Relationship:")
+    ents['p_name'] = create_row("Guardian Name:", "p_name")
+    ents['p_phone'] = create_row("Guardian Phone:", "p_phone")
+    ents['p_rel'] = create_row("Relationship:", "p_rel")
 
-    # --- 5. Technical Details ---
+    # --- 5. Account & Security ---
     add_section("5. Account & Security")
-    ents['user'] = create_row("Set Username:")
-    ents['pass'] = create_row("Set Password:", is_pass=True)
+    ents['user'] = create_row("Set Username:", "user")
+    ents['pass'] = create_row("Set Password:", "pass", is_pass=True)
+
+    # Password Strength Real-time Feedback
+    strength_lbl = tk.Label(scrollable_frame, text="", font=("Arial", 9, "italic"), bg="white")
+    strength_lbl.pack(anchor="w", padx=165)
+
+    def check_strength(event):
+        password = ents['pass'].get()
+        if not password:
+            strength_lbl.config(text="")
+            return
+        color, label = Validator.get_password_strength(password)
+        strength_lbl.config(text=f"Strength: {label}", fg=color)
+
+    ents['pass'].bind("<KeyRelease>", check_strength)
+
+    # Declaration & Biometrics (Right Column) ... continue rest of your code
 
     consent_var = tk.IntVar()
     tk.Checkbutton(scrollable_frame, text="I declare that the information provided is correct.", 
@@ -163,17 +231,53 @@ def register_student(container):
                 else:
                     save_to_db()
 
+
+
     def start_registration():
-        if not ents['user'].get() or not ents['pass'].get():
-            messagebox.showerror("Error", "Username and Password are required!")
-            return
+        # 1. Clear all previous red error messages
+        for lbl in err_lbls.values():
+            lbl.config(text="")
+
+        # 1. Collect Data from all inputs
+        # Note: .get() works on both tk.Entry and tk.StringVar (dropdowns/radios)
+        form_data = {
+            "fname": ents['fname'].get(),
+            "mname": ents['mname'].get(),
+            "lname": ents['lname'].get(),
+            "email": ents['email'].get(),
+            "curr_addr": ents['curr_addr'].get(),
+            "perm_addr": ents['perm_addr'].get(),
+            "phone": ents['phone'].get(),
+            "year": ents['year'].get(),
+            "faculty": ents['faculty'].get(),
+            "course": ents['course'].get(),
+            "p_name": ents['p_name'].get(),
+            "p_phone": ents['p_phone'].get(),
+            "p_rel": ents['p_rel'].get(),
+            "user": ents['user'].get(),
+            "pass": ents['pass'].get()
+        }
+
+        # 2. Validate everything all at once
+        errors = Validator.validate_all(form_data)
+
+        # 3. If errors exist, update labels and STOP
+        if errors:
+            for key, message in errors.items():
+                if key in err_lbls:
+                    err_lbls[key].config(text=f"⚠ {message}")
+            return # Prevent camera from opening
+
+        # 4. Check Declaration
         if consent_var.get() == 0:
             messagebox.showerror("Error", "Please check the declaration box.")
             return
+
+        # 5. Success -> Open Camera
         is_capturing[0] = True
         cap[0] = cv2.VideoCapture(0)
         update_capture_feed()
-
+        
     def save_to_db():
         is_capturing[0] = False
         if cap[0]: cap[0].release()
