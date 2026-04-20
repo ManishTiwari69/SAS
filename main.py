@@ -19,6 +19,7 @@ class AdminDashboard:
     def __init__(self, root, admin_id):
         # --- THE GATEKEEPER ---
         if not user_session.is_logged_in:
+            root.geometry("1300x850")  # Set the window size
             self.redirect_to_login(root)
             return
 

@@ -161,12 +161,12 @@ def recognize_attendance(main_root, on_close_callback=None):
         running[0] = False
         cap.release()
         
-        # Save Backup
-        if attendance_list:
-            if not os.path.exists("Attendance"): os.makedirs("Attendance")
-            df = pd.DataFrame(attendance_list, columns=['Id', 'Name', 'Date', 'Time'])
-            filename = f"Attendance/Backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-            df.to_csv(filename, index=False)
+        # # Save Backup
+        # if attendance_list:
+        #     if not os.path.exists("Attendance"): os.makedirs("Attendance")
+        #     df = pd.DataFrame(attendance_list, columns=['Id', 'Name', 'Date', 'Time'])
+        #     filename = f"Attendance/Backup_{datetime.datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
+        #     df.to_csv(filename, index=False)
         
         cam_window.destroy()
         if on_close_callback:

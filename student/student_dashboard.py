@@ -1,99 +1,119 @@
 import tkinter as tk
-from tkinter import messagebox, ttk
 from db_config import get_db_connection
+
+import student_attendance
+import student_leave_apply
+import student_leave_history
+import student_edit_profile
+
 
 class StudentDashboard:
     def __init__(self, root, student_id):
         self.root = root
         self.student_id = student_id
-        
-        # 1. Setup Window
-        self.root.title("Student Dashboard - Attendance & Leave")
+
+        # Colors
+        self.SIDEBAR_COLOR = "#1a1c23"
+        self.PRIMARY_COLOR = "#00d084"
+        self.BG_COLOR      = "#f8f9fa"
+
+        self.root.title("Student Dashboard")
         self.root.geometry("1300x850")
-        
-        # 2. Header Section
-        self.header = tk.Frame(self.root, bg="#2c3e50", height=100)
-        self.header.pack(side="top", fill="x")
-        
-        tk.Label(self.header, text="STUDENT PORTAL", font=("Arial", 24, "bold"), 
-                 bg="#2c3e50", fg="white").pack(pady=25)
+        self.root.configure(bg=self.BG_COLOR)
 
-        # 3. Main Content Area (Using two columns)
-        self.main_container = tk.Frame(self.root, bg="#f4f7f6")
-        self.main_container.pack(fill="both", expand=True, padx=20, pady=20)
+        self._build_header()
+        self._build_layout()
 
-        self.setup_left_panel()  # Attendance View
-        self.setup_right_panel() # Leave Application
+        # Default view on open
+        self.show_attendance()
 
-    def setup_left_panel(self):
-        """Displays Attendance Records in a Treeview"""
-        left_panel = tk.LabelFrame(self.main_container, text=" My Attendance History ", 
-                                   font=("Arial", 14, "bold"), bg="white", bd=2)
-        left_panel.place(relx=0, rely=0, relwidth=0.58, relheight=1)
+    # ------------------------------------------------------------------ #
+    #  HEADER                                                              #
+    # ------------------------------------------------------------------ #
+    def _build_header(self):
+        student_name = self._get_student_name()
 
-        # Treeview for Attendance
-        columns = ("Date", "Status", "Time In")
-        self.tree = ttk.Treeview(left_panel, columns=columns, show="headings")
-        
-        for col in columns:
-            self.tree.heading(col, text=col)
-            self.tree.column(col, width=100, anchor="center")
+        header = tk.Frame(self.root, bg=self.SIDEBAR_COLOR, height=70)
+        header.pack(side="top", fill="x")
+        header.pack_propagate(False)
 
-        self.tree.pack(fill="both", expand=True, padx=10, pady=10)
-        self.load_attendance_data()
+        tk.Label(header, text="🎓  STUDENT PORTAL",
+                 font=("Arial", 18, "bold"),
+                 bg=self.SIDEBAR_COLOR, fg=self.PRIMARY_COLOR
+                 ).pack(side="left", padx=30, pady=15)
 
-    def setup_right_panel(self):
-        """Form to submit Leave Applications"""
-        right_panel = tk.LabelFrame(self.main_container, text=" Apply for Leave ", 
-                                    font=("Arial", 14, "bold"), bg="white", bd=2)
-        right_panel.place(relx=0.6, rely=0, relwidth=0.4, relheight=1)
+        tk.Label(header, text=f"Welcome, {student_name} 👋",
+                 font=("Arial", 12),
+                 bg=self.SIDEBAR_COLOR, fg="white"
+                 ).pack(side="right", padx=30)
 
-        tk.Label(right_panel, text="Reason for Leave:", bg="white").pack(anchor="w", padx=20, pady=(20, 5))
-        self.leave_reason = tk.Entry(right_panel, font=("Arial", 12), bg="#e8f0fe")
-        self.leave_reason.pack(fill="x", padx=20, pady=5)
+    # ------------------------------------------------------------------ #
+    #  SIDEBAR + CONTENT AREA                                             #
+    # ------------------------------------------------------------------ #
+    def _build_layout(self):
+        # Sidebar
+        self.sidebar = tk.Frame(self.root, bg=self.SIDEBAR_COLOR, width=220)
+        self.sidebar.pack(side="left", fill="y")
+        self.sidebar.pack_propagate(False)
 
-        tk.Label(right_panel, text="Date (YYYY-MM-DD):", bg="white").pack(anchor="w", padx=20, pady=(10, 5))
-        self.leave_date = tk.Entry(right_panel, font=("Arial", 12), bg="#e8f0fe")
-        self.leave_date.pack(fill="x", padx=20, pady=5)
+        tk.Label(self.sidebar, text="MENU", font=("Arial", 9, "bold"),
+                 bg=self.SIDEBAR_COLOR, fg="#888"
+                 ).pack(anchor="w", padx=20, pady=(25, 5))
 
-        tk.Button(right_panel, text="Submit Application", bg="#3498db", fg="white", 
-                  font=("Arial", 12, "bold"), command=self.submit_leave).pack(pady=30, padx=20, fill="x")
+        self._menu_btn("📊  My Attendance",    self.show_attendance)
+        self._menu_btn("📝  Apply for Leave",  self.show_leave_apply)
+        self._menu_btn("📋  My Leave History", self.show_leave_history)
+        self._menu_btn("⚙️  Edit My Profile",  self.show_edit_profile)
 
-    def load_attendance_data(self):
-        """Fetch attendance from DB for specific student"""
+        # Content area — views are rendered inside here
+        self.content_area = tk.Frame(self.root, bg=self.BG_COLOR)
+        self.content_area.pack(side="right", fill="both", expand=True)
+
+    def _menu_btn(self, text, command):
+        btn = tk.Button(
+            self.sidebar, text=text, font=("Arial", 11),
+            bg=self.SIDEBAR_COLOR, fg="white", bd=0,
+            activebackground="#2d2f39", activeforeground=self.PRIMARY_COLOR,
+            anchor="w", padx=20, pady=12, cursor="hand2",
+            command=lambda: self._switch(command)
+        )
+        btn.pack(fill="x", pady=2)
+
+    def _switch(self, command):
+        """Clear content area then load the new view."""
+        if self.content_area.winfo_exists():
+            for w in self.content_area.winfo_children():
+                w.destroy()
+        command()
+
+    # ------------------------------------------------------------------ #
+    #  ROUTING — each delegates to its own module                         #
+    # ------------------------------------------------------------------ #
+    def show_attendance(self):
+        student_attendance.show_attendance(self.content_area, self.student_id)
+
+    def show_leave_apply(self):
+        student_leave_apply.show_leave_apply(self.content_area, self.student_id)
+
+    def show_leave_history(self):
+        student_leave_history.show_leave_history(self.content_area, self.student_id)
+
+    def show_edit_profile(self):
+        student_edit_profile.show_edit_profile(self.content_area, self.student_id)
+
+    # ------------------------------------------------------------------ #
+    #  HELPERS                                                             #
+    # ------------------------------------------------------------------ #
+    def _get_student_name(self):
         try:
             db = get_db_connection()
             cursor = db.cursor()
-            # Assuming your table is called 'attendance' and has a 'student_id' column
-            query = "SELECT date, status, time_in FROM attendance WHERE student_id = %s ORDER BY date DESC"
-            cursor.execute(query, (self.student_id,))
-            rows = cursor.fetchall()
-            
-            for row in rows:
-                self.tree.insert("", "end", values=row)
+            cursor.execute(
+                "SELECT CONCAT(first_name, ' ', last_name) "
+                "FROM student_profiles WHERE student_id = %s",
+                (self.student_id,))
+            result = cursor.fetchone()
             db.close()
-        except Exception as e:
-            print(f"Error loading attendance: {e}")
-
-    def submit_leave(self):
-        reason = self.leave_reason.get()
-        date = self.leave_date.get()
-
-        if not reason or not date:
-            messagebox.showwarning("Input Error", "Please fill in all leave details.")
-            return
-
-        try:
-            db = get_db_connection()
-            cursor = db.cursor()
-            # Assuming a 'leave_applications' table exists
-            query = "INSERT INTO leave_applications (student_id, reason, leave_date, status) VALUES (%s, %s, %s, %s)"
-            cursor.execute(query, (self.student_id, reason, date, 'Pending'))
-            db.commit()
-            db.close()
-            
-            messagebox.showinfo("Success", "Leave application submitted for approval.")
-            self.leave_reason.delete(0, tk.END)
-            self.leave_date.delete(0, tk.END)
-        except Exception as e:
-            messagebox.showerror("Database Error", f"Could not submit leave: {e}")
+            return result[0] if result else "Student"
+        except Exception:
+            return "Student"
