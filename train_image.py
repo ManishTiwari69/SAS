@@ -1,88 +1,118 @@
+"""
+train_image.py  —  Face model training / incremental update.
+
+Storage layout
+──────────────
+  Admin   images  →  TrainingImage/admin/{admin_id}/{admin_id}.{n}.jpg
+  Student images  →  TrainingImage/student/{student_id}/{student_id}.{n}.jpg
+
+Trainer files
+─────────────
+  TrainingImageLabel/AdminTrainner.yml
+  TrainingImageLabel/StudentTrainner.yml
+"""
+
 import os
 import cv2
 import numpy as np
 from PIL import Image
 
-def get_specific_images_and_labels(base_path, target_id):
-    """Recursively searches subfolders for images matching the target_id."""
-    faces = []
-    ids = []
-    
-    # We look inside TrainingImage/student/
-    for root, dirs, files in os.walk(base_path):
-        for filename in files:
-            # Only process face samples (exclude profile pics)
-            if filename.endswith(".jpg") and not filename.startswith("profile_"):
-                try:
-                    # New format: sid.sample.jpg -> split(".")[0] gets the sid
-                    current_id = int(filename.split(".")[0])
-                    
-                    if current_id == int(target_id):
-                        imagePath = os.path.join(root, filename)
-                        pilImage = Image.open(imagePath).convert('L')
-                        imageNp = np.array(pilImage, 'uint8')
-                        faces.append(imageNp)
-                        ids.append(current_id)
-                except (IndexError, ValueError):
+# ── Project root (same directory as this script) ──────────────────────
+BASE_DIR       = os.path.dirname(os.path.abspath(__file__))
+LABEL_DIR      = os.path.join(BASE_DIR, "TrainingImageLabel")
+TRAINING_DIR   = os.path.join(BASE_DIR, "TrainingImage")
+
+
+def _trainer_path(training_type: str) -> str:
+    os.makedirs(LABEL_DIR, exist_ok=True)
+    return os.path.join(LABEL_DIR, f"{training_type.capitalize()}Trainner.yml")
+
+
+def _image_base(training_type: str) -> str:
+    return os.path.join(TRAINING_DIR, training_type)
+
+
+# ── Image + label collectors ──────────────────────────────────────────
+
+def _collect_for_id(base_path: str, target_id: int):
+    """Return (faces, ids) for a single person's images only."""
+    faces, ids = [], []
+    for root, _, files in os.walk(base_path):
+        for fname in files:
+            if not fname.endswith(".jpg") or fname.startswith("profile_"):
+                continue
+            try:
+                file_id = int(fname.split(".")[0])
+                if file_id != target_id:
                     continue
+                img_path = os.path.join(root, fname)
+                pil_img  = Image.open(img_path).convert("L")
+                faces.append(np.array(pil_img, "uint8"))
+                ids.append(file_id)
+            except (ValueError, IndexError):
+                continue
     return faces, ids
 
+
+def _collect_all(base_path: str):
+    """Return (faces, ids) for every person under base_path."""
+    faces, ids = [], []
+    for root, _, files in os.walk(base_path):
+        for fname in files:
+            if not fname.endswith(".jpg") or fname.startswith("profile_"):
+                continue
+            try:
+                file_id  = int(fname.split(".")[0])
+                img_path = os.path.join(root, fname)
+                pil_img  = Image.open(img_path).convert("L")
+                faces.append(np.array(pil_img, "uint8"))
+                ids.append(file_id)
+            except (ValueError, IndexError):
+                continue
+    return faces, ids
+
+
+# ── Public API ────────────────────────────────────────────────────────
+
 def TrainImages(new_id=None, training_type="student"):
-    recognizer = cv2.face.LBPHFaceRecognizer_create()
-    label_folder = "TrainingImageLabel"
-    
-    if not os.path.exists(label_folder):
-        os.makedirs(label_folder)
-        
-    trainer_path = os.path.join(label_folder, f"{training_type.capitalize()}Trainner.yml")
-    
-    # The base path where images are stored (TrainingImage/student)
-    image_base_path = os.path.join("TrainingImage", training_type)
+    """
+    Parameters
+    ----------
+    new_id        : int | None
+        When given, do an *incremental* update for that single person.
+        When None, do a *full* retrain from scratch.
+    training_type : 'student' | 'admin'
+    """
+    recognizer  = cv2.face.LBPHFaceRecognizer_create()
+    trainer_pth = _trainer_path(training_type)
+    image_base  = _image_base(training_type)
 
-    if not os.path.exists(image_base_path):
-        print(f"❌ {image_base_path} folder is missing!")
-        return
+    if not os.path.exists(image_base):
+        print(f"❌  Image folder missing: {image_base}")
+        return False
 
-    # Force full train if yml is missing
-    if not os.path.exists(trainer_path):
-        new_id = None 
+    # Force full retrain if the YML doesn't exist yet
+    if not os.path.exists(trainer_pth):
+        new_id = None
 
-    if new_id:
-        # --- INCREMENTAL UPDATE ---
-        print(f"--- Updating {training_type} Model for ID: {new_id} ---")
-        recognizer.read(trainer_path)
-        faces, ids = get_specific_images_and_labels(image_base_path, new_id)
-        
-        if len(faces) > 0:
-            recognizer.update(faces, np.array(ids))
-        else:
-            print(f"No new samples found for ID {new_id} in {image_base_path}")
-            return
+    if new_id is not None:
+        # ── INCREMENTAL ────────────────────────────────────────────────
+        print(f"[train_image] Incremental update for {training_type} ID={new_id}")
+        recognizer.read(trainer_pth)
+        faces, ids = _collect_for_id(image_base, int(new_id))
+        if not faces:
+            print(f"[train_image] No samples found for ID {new_id}")
+            return False
+        recognizer.update(faces, np.array(ids))
     else:
-        # --- FULL TRAINING ---
-        print(f"--- Full Training for {training_type} ---")
-        faces, ids = [], []
-        
-        for root, dirs, files in os.walk(image_base_path):
-            for filename in files:
-                # Ignore profile photos and hidden files
-                if filename.endswith(".jpg") and not filename.startswith("profile_"):
-                    try:
-                        path = os.path.join(root, filename)
-                        pilImage = Image.open(path).convert('L')
-                        faces.append(np.array(pilImage, 'uint8'))
-                        
-                        # Grab ID from start of filename (e.g., "1.45.jpg" -> 1)
-                        student_id = int(filename.split(".")[0])
-                        ids.append(student_id)
-                    except Exception:
-                        continue
-        
-        if len(faces) > 0:
-            recognizer.train(faces, np.array(ids))
-        else:
-            print(f"❌ No training images found in {image_base_path}")
-            return
+        # ── FULL RETRAIN ───────────────────────────────────────────────
+        print(f"[train_image] Full retrain for {training_type}")
+        faces, ids = _collect_all(image_base)
+        if not faces:
+            print(f"[train_image] No training images in {image_base}")
+            return False
+        recognizer.train(faces, np.array(ids))
 
-    recognizer.save(trainer_path)
-    print(f"✅ {training_type.capitalize()} Model Saved at {trainer_path}")
+    recognizer.save(trainer_pth)
+    print(f"[train_image] ✅  Model saved → {trainer_pth}")
+    return True

@@ -80,27 +80,27 @@ class LoginApp:
             db = get_db_connection()
             cursor = db.cursor()
             
-            # CHANGE: Select both admin_id and password
-            cursor.execute("SELECT admin_id, password FROM admins WHERE username = %s", (u,))
+            # 1. Fetch admin_id, password, AND role
+            cursor.execute("SELECT admin_id, password, role FROM admins WHERE username = %s", (u,))
             result = cursor.fetchone()
             
             if result:
-                # result[0] is admin_id, result[1] is password
                 db_admin_id = result[0]
                 stored_hashed_pw = result[1]
+                db_role = result[2] # Save the role from the database
                 
                 if bcrypt.checkpw(p.encode('utf-8'), stored_hashed_pw.encode('utf-8')):
-                    # SAVE THE ID HERE
                     self.logged_in_id = db_admin_id 
+                    self.logged_in_role = db_role # Store it temporarily in the class
                     
                     self.status_lbl.config(text="Login Successful! Redirecting...", fg="#2ecc71")
                     self.root.update()
                     self.root.after(800, self.launch_main)
                 else:
-                    messagebox.showerror("Error", "Invalid Password")
+                        messagebox.showerror("Error", "Invalid Password")
             else:
                 messagebox.showerror("Error", "Username not found")
-            
+                
             db.close()
         except Exception as e:
             messagebox.showerror("Connection Error", f"Database error: {e}")
@@ -116,16 +116,39 @@ class LoginApp:
                 for (x, y, w, h) in faces:
                     predicted_id, conf = self.recognizer.predict(gray[y:y+h, x:x+w])
                     
+                    # 1. Check if face is recognized with high confidence
                     if conf < 65: 
-                        # SAVE THE ID FROM THE FACE SCAN
-                        self.logged_in_id = predicted_id 
-                        
-                        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
-                        self.status_lbl.config(text="Verified! Welcome.", fg="#2ecc71")
-                        self.root.update()
-                        self.root.after(500, self.launch_main)
-                        return 
+                        try:
+                            # 2. DATABASE VERIFICATION (The "Gatekeeper")
+                            db = get_db_connection()
+                            cursor = db.cursor()
+                            
+                            # Check if this ID actually exists and get the role/username
+                            cursor.execute("SELECT admin_id, role, username FROM admins WHERE admin_id = %s", (predicted_id,))
+                            result = cursor.fetchone()
+                            db.close()
+
+                            if result:
+                                # User found in DB - Proceed to login
+                                self.logged_in_id = result[0]
+                                self.logged_in_role = result[1]
+                                # Store username for the session display
+                                self.user_ent_text = result[2] 
+                                
+                                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+                                self.status_lbl.config(text="Verified! Welcome.", fg="#2ecc71")
+                                self.root.update()
+                                self.root.after(500, self.launch_main)
+                                return 
+                            else:
+                                # Face recognized but user DELETED from DB
+                                cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 255), 2)
+                                self.status_lbl.config(text="Unauthorized: User Deleted", fg="#e74c3c")
+                                
+                        except Exception as e:
+                            print(f"Database error during Face ID: {e}")
                     else:
+                        # Face not recognized
                         cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 255), 2)
 
                 # Convert frame to PhotoImage for Tkinter
@@ -135,7 +158,6 @@ class LoginApp:
                 self.video_label.imgtk = imgtk
                 self.video_label.configure(image=imgtk)
             
-            # This line is CRITICAL to keep the camera running
             self.root.after(10, self.update_camera_frame)
 
     # --- REST OF YOUR FUNCTIONS ---
@@ -162,25 +184,27 @@ class LoginApp:
         self.icon_lbl.place(relx=0.5, rely=0.4, anchor="center")
         self.status_lbl.config(text="SECURE ACCESS", fg="white")
 
+    # UPDATED CODE in login.py -> launch_main
     def launch_main(self):
-    # 1. Kill the camera so it doesn't hang in the background
         self.stop_camera()
         
-        # 2. Update the session so Main.py lets us in
+        # 1. Set global session variables
         user_session.is_logged_in = True
-        user_session.current_user = self.user_ent.get() if self.user_ent.get() else "Admin"
+        user_session.admin_id = self.logged_in_id
+        
+        # 2. Get username from either the entry box (Password login) or the DB query (Face login)
+        username = self.user_ent.get() if self.user_ent.get() else getattr(self, 'user_ent_text', 'Admin')
+        user_session.current_user = username
 
-        # 3. CRITICAL: Wipe the window clean before importing Main
+        # 3. CRITICAL: Pass the role to the session
+        # Use .strip().capitalize() to ensure "super" becomes "Super" for main.py checks
+        user_session.current_role = str(self.logged_in_role).strip().capitalize()
+
         for widget in self.root.winfo_children():
             widget.destroy()
 
-        # 4. Import using the EXACT filename (usually lowercase 'main')
-        try:
-            import main 
-            main.AdminDashboard(self.root, admin_id=self.logged_in_id)
-        except ModuleNotFoundError:
-            import Main
-            Main.AdminDashboard(self.root, admin_id=self.logged_in_id)
+        import main 
+        main.AdminDashboard(self.root, admin_id=self.logged_in_id)
 
     def run(self):
         self.root.mainloop()

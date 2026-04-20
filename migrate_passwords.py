@@ -7,7 +7,7 @@ def migrate_to_hash():
         cursor = db.cursor()
 
         # 1. Fetch all admins and their current plain text passwords
-        cursor.execute("SELECT id, password FROM admins")
+        cursor.execute("SELECT admin_id, password FROM admins")
         admins = cursor.fetchall()
 
         print(f"Found {len(admins)} records to migrate...")
@@ -23,7 +23,7 @@ def migrate_to_hash():
             hashed_pw = bcrypt.hashpw(byte_pwd, bcrypt.gensalt())
 
             # 3. Update the database
-            cursor.execute("UPDATE admins SET password = %s WHERE id = %s", 
+            cursor.execute("UPDATE admins SET password = %s WHERE admin_id = %s", 
                            (hashed_pw, admin_id))
             print(f"Successfully migrated ID {admin_id}")
 
