@@ -3,9 +3,16 @@ from tkinter import messagebox, ttk, filedialog
 import cv2
 import os
 from PIL import Image, ImageTk
+import sys
+
+# 1. Add the parent directory to the search path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+# 2. Now perform your specific imports
 from db_config import get_db_connection
 from train_image import TrainImages 
 from validate import Validator 
+import bcrypt
 import shutil
 
 def update_student(container):
@@ -213,7 +220,10 @@ def update_student(container):
         
         data = {k: v.get() for k, v in ents.items()}
         errors = Validator.validate_all(data)
-        if not data['pass'].strip() and 'pass' in errors: del errors['pass']
+        
+        # If password is blank, we don't need to validate it (since it won't be updated)
+        if not data['pass'].strip() and 'pass' in errors: 
+            del errors['pass']
 
         if errors:
             for k, msg in errors.items():
@@ -223,16 +233,41 @@ def update_student(container):
         try:
             db = get_db_connection()
             cursor = db.cursor()
-            cursor.execute("UPDATE student_profiles SET first_name=%s, middle_name=%s, last_name=%s, email=%s, phone=%s, curr_address=%s, perm_address=%s WHERE student_id=%s", 
-                           (data['fname'], data['mname'], data['lname'], data['email'], data['phone'], data['curr_addr'], data['perm_addr'], sid))
-            cursor.execute("UPDATE student_academic SET faculty=%s, course=%s, acad_year=%s, guardian_name=%s, guardian_phone=%s, relationship=%s WHERE student_id=%s", 
-                           (data['faculty'], data['course'], data['year'], data['p_name'], data['p_phone'], data['p_rel'], sid))
+            
+            # 1. Update Profile Information
+            cursor.execute("""
+                UPDATE student_profiles 
+                SET first_name=%s, middle_name=%s, last_name=%s, email=%s, phone=%s, curr_address=%s, perm_address=%s 
+                WHERE student_id=%s""", 
+                (data['fname'], data['mname'], data['lname'], data['email'], data['phone'], data['curr_addr'], data['perm_addr'], sid))
+            
+            # 2. Update Academic Information
+            cursor.execute("""
+                UPDATE student_academic 
+                SET faculty=%s, course=%s, acad_year=%s, guardian_name=%s, guardian_phone=%s, relationship=%s 
+                WHERE student_id=%s""", 
+                (data['faculty'], data['course'], data['year'], data['p_name'], data['p_phone'], data['p_rel'], sid))
+            
+            # 3. Update Username
             cursor.execute("UPDATE students SET username=%s WHERE student_id=%s", (data['user'], sid))
-            if data['pass'].strip():
-                cursor.execute("UPDATE students SET password=%s WHERE student_id=%s", (data['pass'], sid))
+            
+            # 4. Handle Secure Password Update
+            new_password = data['pass'].strip()
+            if new_password:
+                # Generate salt and hash the password
+                salt = bcrypt.gensalt()
+                hashed_pw = bcrypt.hashpw(new_password.encode('utf-8'), salt)
+                
+                # Update the database with the HASH, not the plain text
+                cursor.execute("UPDATE students SET password=%s WHERE student_id=%s", (hashed_pw.decode('utf-8'), sid))
+            
             db.commit()
             db.close()
-            messagebox.showinfo("Success", "Records updated!")
+            messagebox.showinfo("Success", "Records updated securely!")
+            
+            # Clear error labels on success
+            for lbl in err_lbls.values(): lbl.config(text="")
+            
         except Exception as e:
             messagebox.showerror("Error", f"Update failed: {e}")
 

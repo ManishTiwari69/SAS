@@ -5,7 +5,7 @@ import mysql.connector.errors
 # Create a connection pool (keeps connections ready in the background)
 db_pool = mysql.connector.pooling.MySQLConnectionPool(
     pool_name="sas_pool",
-    pool_size=5,  # Allows up to 5 simultaneous database actions
+    pool_size=32,  # Allows up to 5 simultaneous database actions
     host="localhost",
     user="root",
     password="",

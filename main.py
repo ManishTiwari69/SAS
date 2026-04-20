@@ -1,15 +1,3 @@
-"""
-main.py  —  AdminDashboard
-───────────────────────────
-Security
-  • If launched directly WITHOUT a valid session → forcibly redirects to login.
-  • Role-based sidebar: Teacher sees student features; Super sees everything.
-
-Usage
-  Always launched through login.py, which sets user_session before calling:
-      AdminDashboard(root, admin_id=logged_in_id)
-"""
-
 import tkinter as tk
 from tkinter import messagebox
 from datetime import date
@@ -18,16 +6,17 @@ import sys, os
 from db_config       import get_db_connection, check_db_status
 from session         import user_session
 
-# ── lazy imports (avoids circular issues at module load) ───────────────
+
 import check_camera
 import admin_register
 import recognize
 import view_attendance
-import manage_students          # NEW — both roles
-import manage_admins            # Super only
+import manage_students         
+import manage_admins            
 from edit_admin      import edit_admin
 from student_register import register_student
 import update_student
+from manage_leave     import show_leave_requests
 
 
 class AdminDashboard:
@@ -41,7 +30,7 @@ class AdminDashboard:
         self.root     = root
         self.admin_id = admin_id
 
-        print(f"DEBUG: Loaded role is '{user_session.current_role}'")
+        # print(f"DEBUG: Loaded role is '{user_session.current_role}'")
 
         # ══ SESSION BARRIER ═══════════════════════════════════════════
         # Executed BEFORE any widget is created — catches both direct
@@ -57,23 +46,16 @@ class AdminDashboard:
         self.root.title("Attenad — AI Attendance System")
         self.root.geometry("1300x850")
         self.root.configure(bg=self.BG)
-
-        # Intercept window-close button  → clean logout
         self.root.protocol("WM_DELETE_WINDOW", self._on_close)
 
         self._build_layout()
 
-    # ──────────────────────────────────────────────────────────────────
-    #  LAYOUT
-    # ──────────────────────────────────────────────────────────────────
     def _build_layout(self):
 
-        # ── Sidebar ───────────────────────────────────────────────────
         self.sidebar = tk.Frame(self.root, bg=self.SIDEBAR, width=245)
         self.sidebar.pack(side="left", fill="y")
         self.sidebar.pack_propagate(False)
 
-        # Logo
         logo = tk.Frame(self.sidebar, bg=self.SIDEBAR)
         logo.pack(fill="x", pady=(26, 6))
         tk.Label(logo, text="🅰  Attenad",
@@ -88,7 +70,6 @@ class AdminDashboard:
 
         tk.Frame(self.sidebar, bg="#2d2f39", height=1).pack(fill="x", padx=18)
 
-        # ── Menu items ────────────────────────────────────────────────
         self._section("MAIN")
         self._btn("🏠  Dashboard",          self._render_overview)
         self._btn("📷  Check Camera",
@@ -107,6 +88,8 @@ class AdminDashboard:
                   lambda: update_student.update_student(self.content))
         self._btn("📋  Manage Students",          # ← NEW (both roles)
                   lambda: manage_students.show_manage_students(self.content))
+        self._btn("✉️  Leave Requests",
+                  lambda: show_leave_requests(self.content))
 
         # Super-only section
         if self.role == "Super":
@@ -124,7 +107,7 @@ class AdminDashboard:
                       self.content, self.admin_id, self._render_overview))
         self._btn("🚪  Logout", self._logout, color=self.ACCENT)
 
-        # ── Topbar ────────────────────────────────────────────────────
+  
         topbar = tk.Frame(self.root, bg="white", height=62,
                           highlightthickness=1, highlightbackground="#eee")
         topbar.pack(side="top", fill="x")
@@ -143,7 +126,7 @@ class AdminDashboard:
                  padx=6, pady=3
                  ).pack(side="right", pady=18)
 
-        # ── Content area ──────────────────────────────────────────────
+
         self.content = tk.Frame(self.root, bg=self.BG)
         self.content.pack(side="right", fill="both", expand=True)
 
@@ -174,9 +157,6 @@ class AdminDashboard:
             cursor="hand2", command=_wrapper
         ).pack(fill="x", pady=1)
 
-    # ──────────────────────────────────────────────────────────────────
-    #  OVERVIEW
-    # ──────────────────────────────────────────────────────────────────
     def _render_overview(self):
         for w in self.content.winfo_children():
             w.destroy()
@@ -220,6 +200,8 @@ class AdminDashboard:
              lambda: register_student(self.content, self._render_overview)),
             ("📋  Manage Students",    "#8e44ad",
              lambda: manage_students.show_manage_students(self.content)),
+            ("✉️  Leave Requests",     "#e67e22", 
+             lambda: manage_leave.show_leave_requests(self.content)),
         ]
         if self.role == "Super":
             actions.append(
@@ -250,9 +232,6 @@ class AdminDashboard:
                  bg=bg,
                  fg=fg if bg != "#fff" else "#888").pack()
 
-    # ──────────────────────────────────────────────────────────────────
-    #  DB helpers
-    # ──────────────────────────────────────────────────────────────────
     def _get_stats(self):
         try:
             db     = get_db_connection()
@@ -291,9 +270,7 @@ class AdminDashboard:
         except Exception:
             return "Admin"
 
-    # ──────────────────────────────────────────────────────────────────
-    #  Auth
-    # ──────────────────────────────────────────────────────────────────
+  
     def _redirect_to_login(self):
         """
         Called when there is NO valid session.
@@ -318,9 +295,6 @@ class AdminDashboard:
         self.root.destroy()
 
 
-# ──────────────────────────────────────────────────────────────────────
-#  ENTRY POINT
-# ──────────────────────────────────────────────────────────────────────
 if __name__ == "__main__":
 
     # 1. DB check
@@ -334,9 +308,7 @@ if __name__ == "__main__":
         _r.destroy()
         sys.exit(1)
 
-    # 2. ── SESSION BARRIER (direct launch guard) ──────────────────────
-    # When main.py is run directly (python main.py), no session exists.
-    # We start the login flow instead of the dashboard.
+
     root = tk.Tk()
     root.geometry("1300x850")
     root.title("Attenad — Attendance System")

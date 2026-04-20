@@ -1,11 +1,14 @@
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import tkinter as tk
 from tkinter import ttk, messagebox
 from db_config import get_db_connection
 from datetime import date as dt_date
+from tkcalendar import DateEntry  # Ensure you have installed: pip install tkcalendar
 
 PRIMARY_COLOR = "#00d084"
 BG_COLOR      = "#f8f9fa"
-
 
 def show_leave_apply(container, student_id):
     """Render the Leave Application form into container."""
@@ -20,7 +23,7 @@ def show_leave_apply(container, student_id):
     form.pack(fill="x", pady=10)
     form.columnconfigure(0, weight=1)
 
-    # ── Reason ─────────────────────────────────────────────────────────
+    # --- Reason ---
     tk.Label(form, text="Reason for Leave:", font=("Arial", 11, "bold"),
              bg="white", fg="#555").grid(row=0, column=0, sticky="w", padx=25, pady=(25, 4))
 
@@ -28,7 +31,7 @@ def show_leave_apply(container, student_id):
                           highlightthickness=1, highlightbackground="#c0c8ff")
     reason_ent.grid(row=1, column=0, sticky="ew", padx=25, ipady=8)
 
-    # ── Leave Type ─────────────────────────────────────────────────────
+    # --- Leave Type ---
     tk.Label(form, text="Leave Type:", font=("Arial", 11, "bold"),
              bg="white", fg="#555").grid(row=2, column=0, sticky="w", padx=25, pady=(15, 4))
 
@@ -39,31 +42,36 @@ def show_leave_apply(container, student_id):
         font=("Arial", 12), state="readonly")
     type_menu.grid(row=3, column=0, sticky="ew", padx=25, ipady=5)
 
-    # ── From Date ──────────────────────────────────────────────────────
-    tk.Label(form, text="From Date (YYYY-MM-DD):", font=("Arial", 11, "bold"),
+    # --- From Date (Picker) ---
+    tk.Label(form, text="From Date:", font=("Arial", 11, "bold"),
              bg="white", fg="#555").grid(row=4, column=0, sticky="w", padx=25, pady=(15, 4))
 
-    start_ent = tk.Entry(form, font=("Arial", 12), bg="#f0f4ff", relief="flat",
-                         highlightthickness=1, highlightbackground="#c0c8ff")
-    start_ent.grid(row=5, column=0, sticky="ew", padx=25, ipady=8)
+    start_ent = DateEntry(form, font=("Arial", 12), background='darkblue',
+                          foreground='white', borderwidth=2, date_pattern='yyyy-mm-dd')
+    start_ent.grid(row=5, column=0, sticky="ew", padx=25, ipady=5)
 
-    # ── To Date ────────────────────────────────────────────────────────
-    tk.Label(form, text="To Date (YYYY-MM-DD):", font=("Arial", 11, "bold"),
+    # --- To Date (Picker) ---
+    tk.Label(form, text="To Date:", font=("Arial", 11, "bold"),
              bg="white", fg="#555").grid(row=6, column=0, sticky="w", padx=25, pady=(15, 4))
 
-    end_ent = tk.Entry(form, font=("Arial", 12), bg="#f0f4ff", relief="flat",
-                       highlightthickness=1, highlightbackground="#c0c8ff")
-    end_ent.grid(row=7, column=0, sticky="ew", padx=25, ipady=8, pady=(0, 20))
+    end_ent = DateEntry(form, font=("Arial", 12), background='darkblue',
+                        foreground='white', borderwidth=2, date_pattern='yyyy-mm-dd')
+    end_ent.grid(row=7, column=0, sticky="ew", padx=25, ipady=5, pady=(0, 20))
 
-    # ── Submit Button ──────────────────────────────────────────────────
+    # --- Submit Button ---
     def submit():
         reason     = reason_ent.get().strip()
         leave_type = leave_type_var.get()
-        start_date = start_ent.get().strip()
-        end_date   = end_ent.get().strip()
+        # .get_date() returns a datetime.date object directly
+        start_date = start_ent.get_date()
+        end_date   = end_ent.get_date()
 
-        if not reason or not start_date or not end_date:
-            messagebox.showwarning("Input Error", "Please fill in all fields.")
+        if not reason:
+            messagebox.showwarning("Input Error", "Please provide a reason.")
+            return
+            
+        if start_date > end_date:
+            messagebox.showwarning("Input Error", "Start date cannot be after end date.")
             return
 
         try:
@@ -78,11 +86,8 @@ def show_leave_apply(container, student_id):
             db.commit()
             db.close()
 
-            messagebox.showinfo("Success",
-                                "Leave application submitted!\nStatus: Pending approval.")
+            messagebox.showinfo("Success", "Leave application submitted!")
             reason_ent.delete(0, tk.END)
-            start_ent.delete(0, tk.END)
-            end_ent.delete(0, tk.END)
             leave_type_var.set("Sick Leave")
 
         except Exception as e:

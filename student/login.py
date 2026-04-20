@@ -79,11 +79,18 @@ class StudentLoginApp:
         try:
             db = get_db_connection()
             cursor = db.cursor()
-            cursor.execute("SELECT student_id, password, name FROM students WHERE username = %s", (u,))
+            # Select status as well
+            cursor.execute("SELECT student_id, password, username, status FROM students WHERE username = %s", (u,))
             result = cursor.fetchone()
             
             if result:
-                db_student_id, stored_hashed_pw, student_name = result
+                db_student_id, stored_hashed_pw, student_name, status = result
+                
+                # Check status first
+                if str(status).lower() != 'active':
+                    messagebox.showwarning("Access Denied", "Your account is currently deactivated.")
+                    return
+
                 if bcrypt.checkpw(p.encode('utf-8'), stored_hashed_pw.encode('utf-8')):
                     self.logged_in_id = db_student_id 
                     user_session.current_user = student_name
@@ -104,23 +111,43 @@ class StudentLoginApp:
             if ret:
                 gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
                 faces = self.face_cascade.detectMultiScale(gray, 1.2, 5)
+                
                 for (x, y, w, h) in faces:
                     predicted_id, conf = self.recognizer.predict(gray[y:y+h, x:x+w])
+                    
                     if conf < 65: 
-                        self.logged_in_id = predicted_id 
-                        self.status_lbl.config(text="Face Verified!", fg="#2ecc71")
-                        self.root.update()
-                        self.root.after(500, self.launch_student_dashboard)
-                        return 
+                        # --- FIX: Only query DB if we haven't already identified a student ---
+                        if not self.logged_in_id: 
+                            try:
+                                db = get_db_connection()
+                                cursor = db.cursor()
+                                cursor.execute("SELECT username, status FROM students WHERE student_id = %s", (predicted_id,))
+                                result = cursor.fetchone()
+                                db.close()
+
+                                if result:
+                                    student_name, status = result
+                                    if str(status).lower() == 'active':
+                                        self.logged_in_id = predicted_id 
+                                        user_session.current_user = student_name
+                                        self.status_lbl.config(text="Face Verified! Welcome.", fg="#2ecc71")
+                                        
+                                        # Stop the camera immediately on success
+                                        self.is_camera_on = False
+                                        self.cap.release()
+                                        
+                                        self.root.after(500, self.launch_student_dashboard)
+                                        return 
+                                    else:
+                                        self.status_lbl.config(text="Account Deactivated", fg="#e74c3c")
+                            except Exception as e:
+                                print(f"Face ID DB Check Error: {e}")
                     else:
                         cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 0, 255), 2)
 
-                img = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                img = Image.fromarray(img).resize((450, 450), Image.LANCZOS)
-                imgtk = ImageTk.PhotoImage(image=img)
-                self.video_label.imgtk = imgtk
-                self.video_label.configure(image=imgtk)
-            self.root.after(10, self.update_camera_frame)
+                # ... (rest of your image rendering code)
+                self.root.after(10, self.update_camera_frame)
+
 
     def toggle_face_login(self):
         # Look for trainer in the parent directory's folder
